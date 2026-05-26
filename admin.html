@@ -2320,7 +2320,18 @@
       if (!selMateri) return;
       
       const oldVal = selMateri.value;
-      selMateri.innerHTML = '<option value="">-- Pilih Materi / Kuis Asal --</option>';
+      selMateri.innerHTML = `
+        <option value="">-- Pilih Materi / Kuis Asal --</option>
+        <optgroup label="Tingkat Kelas (Semua Soal)">
+          <option value="ALL_X" data-tingkat="X">[Semua Soal Kelas X]</option>
+          <option value="ALL_XI" data-tingkat="XI">[Semua Soal Kelas XI]</option>
+          <option value="ALL_XII" data-tingkat="XII">[Semua Soal Kelas XII]</option>
+        </optgroup>
+        <optgroup label="Berdasarkan Judul Kuis" id="optgroupQuizzes">
+        </optgroup>
+      `;
+      
+      const optgroupQuizzes = document.getElementById('optgroupQuizzes');
       
       // Saring materi yang bertipe Kuis, Praktik, Editor (bukan tipe Materi teori)
       const quizes = dataMateri.filter(m => {
@@ -2335,7 +2346,7 @@
         const kelas = getTingkatSync(m);
         
         if (idManual) {
-          selMateri.innerHTML += `<option value="${idManual}" data-row="${m.rowNumber}" data-tingkat="${kelas}">[ID: ${idManual}] ${judul} - Kelas ${kelas} (${mapel})</option>`;
+          optgroupQuizzes.innerHTML += `<option value="${idManual}" data-row="${m.rowNumber}" data-tingkat="${kelas}">[ID: ${idManual}] ${judul} - Kelas ${kelas} (${mapel})</option>`;
         }
       });
       
@@ -2357,6 +2368,7 @@
       
       const selOpt = document.getElementById('filterMateriAnalisis').options[document.getElementById('filterMateriAnalisis').selectedIndex];
       const targetTingkat = selOpt.getAttribute('data-tingkat') || "";
+      const isGlobalTingkat = selMateri.startsWith("ALL_");
       
       showOverlay("Mengambil bank soal dari database...");
       
@@ -2370,67 +2382,79 @@
         return;
       }
       
-      // 1. Filter Soal yang sesuai dengan ID Materi & Tingkat
-      const filteredSoal = allSoal.filter(q => {
-        const qMidRaw = getVal(q, ['id_materi', 'idmateri', 'materiid', 'materi_id']);
-        const qMid = qMidRaw ? qMidRaw.toString().trim() : "";
-        const qTingkat = (getVal(q, ['tingkat', 'kelas', 'tingkatan']) || "").toString().trim().toUpperCase();
-        
-        let matchId = (qMid == selMateri);
-        let matchTingkat = (qTingkat === "" || qTingkat === "SEMUA" || qTingkat === targetTingkat);
-        return matchId && matchTingkat;
-      });
+      const norm = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+      
+      // 1. Filter Soal
+      let filteredSoal = [];
+      if (isGlobalTingkat) {
+        filteredSoal = allSoal.filter(q => {
+          const qTingkat = (getVal(q, ['tingkat', 'kelas', 'tingkatan']) || "").toString().trim().toUpperCase();
+          return qTingkat === targetTingkat;
+        });
+      } else {
+        filteredSoal = allSoal.filter(q => {
+          const qMidRaw = getVal(q, ['id_materi', 'idmateri', 'materiid', 'materi_id']);
+          const qMid = qMidRaw ? qMidRaw.toString().trim() : "";
+          const qTingkat = (getVal(q, ['tingkat', 'kelas', 'tingkatan']) || "").toString().trim().toUpperCase();
+          
+          let matchId = (qMid == selMateri);
+          let matchTingkat = (qTingkat === "" || qTingkat === "SEMUA" || qTingkat === targetTingkat);
+          return matchId && matchTingkat;
+        });
+      }
       
       if (filteredSoal.length === 0) {
         hideOverlay();
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--danger); font-weight:bold;">Tidak ada soal yang terdaftar untuk materi ini di tab "soal".</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger); font-weight:bold;">Tidak ada soal yang terdaftar untuk tingkat/kuis ini di tab "soal".</td></tr>`;
         document.getElementById('analisisTotalSiswa').innerText = '0';
         document.getElementById('analisisAvgScore').innerText = '0';
         document.getElementById('analisisSoalLayak').innerText = '0';
         return;
       }
       
-      // 2. Filter nilai/jawaban siswa di listNilai untuk materi ini
-      // Kita asumsikan id_materi kuis bernilai 'selMateri'
-      const norm = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-      const studentAttempts = dataNilai.filter(n => {
-        const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
-        let pNilai = getVal(n, ['nilai', 'skor', 'point']);
-        return nMid === selMateri && pNilai !== undefined && pNilai !== null && pNilai !== "";
-      });
+      // Ringkasan global atau spesifik kuis
+      let totalSiswaAnalyzed = 0;
+      let totalScoreSum = 0;
+      let avgScore = 0;
       
-      if (studentAttempts.length === 0) {
-        hideOverlay();
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-muted);">Belum ada data pengerjaan siswa di sheet "listNilai" untuk materi ini. Metrik tidak bisa dihitung.</td></tr>';
-        document.getElementById('analisisTotalSiswa').innerText = '0';
-        document.getElementById('analisisAvgScore').innerText = '-';
-        document.getElementById('analisisSoalLayak').innerText = '-';
-        return;
+      if (!isGlobalTingkat) {
+        const studentAttempts = dataNilai.filter(n => {
+          const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
+          let pNilai = getVal(n, ['nilai', 'skor', 'point']);
+          return nMid === selMateri && pNilai !== undefined && pNilai !== null && pNilai !== "";
+        });
+        
+        totalSiswaAnalyzed = studentAttempts.length;
+        if (totalSiswaAnalyzed > 0) {
+          studentAttempts.forEach(s => {
+            totalScoreSum += parseFloat(getVal(s, ['nilai', 'skor'])) || 0;
+          });
+          avgScore = Math.round(totalScoreSum / totalSiswaAnalyzed);
+        }
+      } else {
+        const relatedMateriIds = new Set(filteredSoal.map(q => (getVal(q, ['id_materi', 'idmateri', 'materiid']) || "").toString().trim()));
+        const attemptsGlobal = dataNilai.filter(n => {
+          const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
+          let pNilai = getVal(n, ['nilai', 'skor', 'point']);
+          return relatedMateriIds.has(nMid) && pNilai !== undefined && pNilai !== null && pNilai !== "";
+        });
+        
+        totalSiswaAnalyzed = attemptsGlobal.length;
+        if (totalSiswaAnalyzed > 0) {
+          attemptsGlobal.forEach(s => {
+            totalScoreSum += parseFloat(getVal(s, ['nilai', 'skor'])) || 0;
+          });
+          avgScore = Math.round(totalScoreSum / totalSiswaAnalyzed);
+        }
       }
       
-      // Hitung Rata-rata Nilai
-      let totalScoreSum = 0;
-      studentAttempts.forEach(s => {
-        totalScoreSum += parseFloat(getVal(s, ['nilai', 'skor'])) || 0;
-      });
-      const avgScore = Math.round(totalScoreSum / studentAttempts.length);
+      document.getElementById('analisisTotalSiswa').innerText = totalSiswaAnalyzed;
+      document.getElementById('analisisAvgScore').innerText = totalSiswaAnalyzed > 0 ? avgScore + " / 100" : "-";
       
-      document.getElementById('analisisTotalSiswa').innerText = studentAttempts.length;
-      document.getElementById('analisisAvgScore').innerText = avgScore + " / 100";
+      // 4. Analisis Tiap Soal
+      let soalLayakCount = 0;
+      let tbodyHtml = '';
       
-      // 3. Kelompok Atas & Bawah (Uji Beda)
-      // Urutkan siswa berdasarkan total skor kuis secara descending
-      const sortedAttempts = [...studentAttempts].sort((a, b) => {
-        let valA = parseFloat(getVal(a, ['nilai', 'skor'])) || 0;
-        let valB = parseFloat(getVal(b, ['nilai', 'skor'])) || 0;
-        return valB - valA;
-      });
-      
-      const halfSize = Math.max(1, Math.round(sortedAttempts.length / 2));
-      const upperGroup = sortedAttempts.slice(0, halfSize);
-      const lowerGroup = sortedAttempts.slice(halfSize);
-      
-      // Helper untuk memparsing jawaban siswa
       const parseAnswersArray = (rec) => {
         let ans = [];
         for (let idx = 1; idx <= 100; idx++) {
@@ -2441,119 +2465,156 @@
         return ans;
       };
       
-      // 4. Analisis Tiap Soal
-      let soalLayakCount = 0;
-      let tbodyHtml = '';
-      
       filteredSoal.forEach((q, qIdx) => {
         const qId = (getVal(q, ['id']) || "").toString().trim();
         const sText = getVal(q, ['soal', 'pertanyaan']) || "Tanpa pertanyaan";
         const kunci = (getVal(q, ['kunci', 'jawaban']) || "").toString().toUpperCase().trim();
+        const originalMid = (getVal(q, ['id_materi', 'idmateri', 'materiid']) || "").toString().trim();
         
-        let correctAttempts = 0;
-        let totalAttempts = 0;
+        const originalJudulMateri = dataMateri.find(m => {
+          let idM = getVal(m, ['idmateri', 'id_materi', 'materiid']);
+          return idM && idM.toString().trim() === originalMid;
+        });
+        const tagMateri = originalJudulMateri ? getVal(originalJudulMateri, ['judul', 'materi']) : "Materi ID: " + originalMid;
         
-        let correctUpper = 0;
-        let correctLower = 0;
-        
-        // Pearson correlation calculation arrays
-        let itemScores = []; // X values (0 or 1)
-        let totalScores = []; // Y values (0 to 100)
-        
-        studentAttempts.forEach(rec => {
-          let answers = parseAnswersArray(rec);
-          let urutan = (getVal(rec, ['urutan_soal', 'urutansoal']) || "").toString().trim();
-          
-          let ansValue = "";
-          if (urutan) {
-            // Menggunakan urutan soal untuk mendapatkan index jawaban yang benar
-            let orderArray = urutan.split(",");
-            let idx = orderArray.indexOf(qId);
-            if (idx !== -1 && idx < answers.length) {
-              ansValue = answers[idx];
-            }
-          } else {
-            // Fallback: Jika tidak diacak, gunakan index default soal
-            if (qIdx < answers.length) {
-              ansValue = answers[qIdx];
-            }
-          }
-          
-          if (ansValue !== "") {
-            let isCorrect = (ansValue === kunci) ? 1 : 0;
-            totalAttempts++;
-            if (isCorrect) correctAttempts++;
-            
-            // Check groups
-            let username = getVal(rec, ['username']);
-            let isUpper = upperGroup.some(u => getVal(u, ['username']) === username);
-            let isLower = lowerGroup.some(l => getVal(l, ['username']) === username);
-            
-            if (isUpper) {
-              if (isCorrect) correctUpper++;
-            } else if (isLower) {
-              if (isCorrect) correctLower++;
-            }
-            
-            itemScores.push(isCorrect);
-            totalScores.push(parseFloat(getVal(rec, ['nilai', 'skor'])) || 0);
-          }
+        // Cari siswa yang mengerjakan kuis khusus untuk soal ini
+        const thisQuestAttempts = dataNilai.filter(n => {
+          const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
+          let pNilai = getVal(n, ['nilai', 'skor', 'point']);
+          return nMid === originalMid && pNilai !== undefined && pNilai !== null && pNilai !== "";
         });
         
+        let P = 0, D = 0, rVal = 0;
+        let isCalculated = false;
+        
+        if (thisQuestAttempts.length > 0) {
+          isCalculated = true;
+          const sortedAttempts = [...thisQuestAttempts].sort((a, b) => {
+            let valA = parseFloat(getVal(a, ['nilai', 'skor'])) || 0;
+            let valB = parseFloat(getVal(b, ['nilai', 'skor'])) || 0;
+            return valB - valA;
+          });
+          
+          const halfSize = Math.max(1, Math.round(sortedAttempts.length / 2));
+          const upperGroup = sortedAttempts.slice(0, halfSize);
+          const lowerGroup = sortedAttempts.slice(halfSize);
+          
+          let correctAttempts = 0;
+          let totalAttempts = 0;
+          let correctUpper = 0;
+          let correctLower = 0;
+          
+          let itemScores = [];
+          let totalScores = [];
+          
+          // Cari index soal asli di kuis ini untuk fallback (jika tidak ada urutan_soal)
+          const quizAllQuestions = allSoal.filter(sq => {
+            const sqMid = (getVal(sq, ['id_materi', 'idmateri', 'materiid']) || "").toString().trim();
+            const sqTingkat = (getVal(sq, ['tingkat', 'kelas', 'tingkatan']) || "").toString().trim().toUpperCase();
+            return sqMid === originalMid && (sqTingkat === "" || sqTingkat === "SEMUA" || sqTingkat === targetTingkat);
+          });
+          const originalIndexInQuiz = quizAllQuestions.findIndex(sq => (getVal(sq, ['id']) || "").toString().trim() === qId);
+          
+          thisQuestAttempts.forEach(rec => {
+            let answers = parseAnswersArray(rec);
+            let urutan = (getVal(rec, ['urutan_soal', 'urutansoal']) || "").toString().trim();
+            
+            let ansValue = "";
+            if (urutan) {
+              let orderArray = urutan.split(",");
+              let idx = orderArray.indexOf(qId);
+              if (idx !== -1 && idx < answers.length) {
+                ansValue = answers[idx];
+              }
+            } else {
+              if (originalIndexInQuiz !== -1 && originalIndexInQuiz < answers.length) {
+                ansValue = answers[originalIndexInQuiz];
+              }
+            }
+            
+            if (ansValue !== "") {
+              let isCorrect = (ansValue === kunci) ? 1 : 0;
+              totalAttempts++;
+              if (isCorrect) correctAttempts++;
+              
+              let username = getVal(rec, ['username']);
+              let isUpper = upperGroup.some(u => getVal(u, ['username']) === username);
+              let isLower = lowerGroup.some(l => getVal(l, ['username']) === username);
+              
+              if (isUpper) {
+                if (isCorrect) correctUpper++;
+              } else if (isLower) {
+                if (isCorrect) correctLower++;
+              }
+              
+              itemScores.push(isCorrect);
+              totalScores.push(parseFloat(getVal(rec, ['nilai', 'skor'])) || 0);
+            }
+          });
+          
+          P = totalAttempts > 0 ? (correctAttempts / totalAttempts) : 0;
+          if (upperGroup.length > 0 && lowerGroup.length > 0) {
+            D = (correctUpper / upperGroup.length) - (correctLower / lowerGroup.length);
+          }
+          if (itemScores.length > 1) {
+            rVal = calculatePearsonCorrelation(itemScores, totalScores);
+          }
+        }
+        
         // A. Tingkat Kesukaran (P)
-        let P = totalAttempts > 0 ? (correctAttempts / totalAttempts) : 0;
-        let kesukaranBadge = '';
-        if (P > 0.70) {
-          kesukaranBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; padding:4px 8px;">Mudah (${Math.round(P*100)}%)</span>`;
-        } else if (P >= 0.30) {
-          kesukaranBadge = `<span class="badge" style="background:#f0fdf4; color:#16a34a; padding:4px 8px;">Sedang (${Math.round(P*100)}%)</span>`;
-        } else {
-          kesukaranBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; padding:4px 8px;">Sukar (${Math.round(P*100)}%)</span>`;
+        let kesukaranBadge = 'N/A';
+        if (isCalculated) {
+          if (P > 0.70) {
+            kesukaranBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; padding:4px 8px;">Mudah (${Math.round(P*100)}%)</span>`;
+          } else if (P >= 0.30) {
+            kesukaranBadge = `<span class="badge" style="background:#f0fdf4; color:#16a34a; padding:4px 8px;">Sedang (${Math.round(P*100)}%)</span>`;
+          } else {
+            kesukaranBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; padding:4px 8px;">Sukar (${Math.round(P*100)}%)</span>`;
+          }
         }
         
         // B. Daya Pembeda (D)
-        let D = 0;
-        let dayapembedaBadge = '';
-        if (upperGroup.length > 0 && lowerGroup.length > 0) {
-          D = (correctUpper / upperGroup.length) - (correctLower / lowerGroup.length);
-        }
-        
-        if (D >= 0.40) {
-          dayapembedaBadge = `<span class="badge active" style="padding:4px 8px;">Sangat Baik (${D.toFixed(2)})</span>`;
-        } else if (D >= 0.30) {
-          dayapembedaBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; padding:4px 8px;">Baik (${D.toFixed(2)})</span>`;
-        } else if (D >= 0.20) {
-          dayapembedaBadge = `<span class="badge orange" style="padding:4px 8px;">Cukup (${D.toFixed(2)})</span>`;
-        } else {
-          dayapembedaBadge = `<span class="badge red" style="padding:4px 8px;">Jelek (${D.toFixed(2)})</span>`;
+        let dayapembedaBadge = 'N/A';
+        if (isCalculated) {
+          if (D >= 0.40) {
+            dayapembedaBadge = `<span class="badge active" style="padding:4px 8px;">Sangat Baik (${D.toFixed(2)})</span>`;
+          } else if (D >= 0.30) {
+            dayapembedaBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; padding:4px 8px;">Baik (${D.toFixed(2)})</span>`;
+          } else if (D >= 0.20) {
+            dayapembedaBadge = `<span class="badge orange" style="padding:4px 8px;">Cukup (${D.toFixed(2)})</span>`;
+          } else {
+            dayapembedaBadge = `<span class="badge red" style="padding:4px 8px;">Jelek (${D.toFixed(2)})</span>`;
+          }
         }
         
         // C. Validitas Pearson (r)
-        let rVal = 0;
-        let validitasBadge = '';
-        if (itemScores.length > 1) {
-          rVal = calculatePearsonCorrelation(itemScores, totalScores);
-        }
-        
-        let isValid = (rVal >= 0.25);
-        if (isValid) {
-          validitasBadge = `<span class="badge active" style="padding:4px 8px;">Valid (${rVal.toFixed(2)})</span>`;
-        } else {
-          validitasBadge = `<span class="badge draft" style="padding:4px 8px;">Tidak Valid (${rVal.toFixed(2)})</span>`;
+        let validitasBadge = 'N/A';
+        let isValid = false;
+        if (isCalculated) {
+          isValid = (rVal >= 0.25);
+          if (isValid) {
+            validitasBadge = `<span class="badge active" style="padding:4px 8px;">Valid (${rVal.toFixed(2)})</span>`;
+          } else {
+            validitasBadge = `<span class="badge draft" style="padding:4px 8px;">Tidak Valid (${rVal.toFixed(2)})</span>`;
+          }
         }
         
         // D. Rekomendasi
-        let rekomendasi = '';
-        if (isValid && D >= 0.30) {
-          rekomendasi = `<span style="color:var(--success); font-weight:bold;">Sangat Layak</span>`;
-          soalLayakCount++;
-        } else if (isValid && D >= 0.20) {
-          rekomendasi = `<span style="color:var(--warning); font-weight:bold;">Perlu Revisi</span>`;
+        let rekomendasi = 'N/A';
+        if (isCalculated) {
+          if (isValid && D >= 0.30) {
+            rekomendasi = `<span style="color:var(--success); font-weight:bold;">Sangat Layak</span>`;
+            soalLayakCount++;
+          } else if (isValid && D >= 0.20) {
+            rekomendasi = `<span style="color:var(--warning); font-weight:bold;">Perlu Revisi</span>`;
+          } else {
+            rekomendasi = `<span style="color:var(--danger); font-weight:bold;">Dibuang / Diganti</span>`;
+          }
         } else {
-          rekomendasi = `<span style="color:var(--danger); font-weight:bold;">Dibuang / Diganti</span>`;
+          rekomendasi = `<span style="color:var(--text-muted); font-style:italic;">Belum Ada Data</span>`;
         }
         
-        let truncatedText = sText.length > 70 ? sText.substring(0, 67) + "..." : sText;
+        let truncatedText = sText.length > 60 ? sText.substring(0, 57) + "..." : sText;
         let tooltipText = sText.replace(/"/g, '&quot;');
         
         tbodyHtml += `<tr>
@@ -2562,6 +2623,7 @@
           </td>
           <td style="text-align:center; font-weight:bold;">${qIdx + 1}</td>
           <td>
+            <div style="font-size:0.7rem; color:var(--primary); font-weight:bold; margin-bottom:2px;">[${tagMateri}]</div>
             <a href="javascript:void(0)" onclick="previewSoalByRow(${q.rowNumber})" title="${tooltipText}" style="color: var(--text-main); font-weight: 500; text-decoration: none; border-bottom: 1px dotted var(--text-muted);">${truncatedText}</a>
           </td>
           <td style="text-align:center;">${kesukaranBadge}</td>

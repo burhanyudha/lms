@@ -2598,7 +2598,7 @@
             
             let ansValue = "";
             if (urutan) {
-              let orderArray = urutan.split(",");
+              let orderArray = urutan.split(",").map(s => s.trim());
               let idx = orderArray.indexOf(qId);
               if (idx !== -1 && idx < answers.length) {
                 ansValue = answers[idx];

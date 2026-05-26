@@ -866,6 +866,15 @@
       return t || "X";
     };
 
+    function getPureTingkat(str) {
+      if (!str) return "";
+      let s = str.toString().trim().toUpperCase();
+      if (s.includes("XII")) return "XII";
+      if (s.includes("XI")) return "XI";
+      if (s.includes("X")) return "X";
+      return s;
+    }
+
     // ============================================
     // FETCH DATA
     // ============================================
@@ -2389,9 +2398,17 @@
       if (isGlobalTingkat) {
         filteredSoal = allSoal.filter(q => {
           const originalMid = (getVal(q, ['id_materi', 'idmateri', 'materiid']) || "").toString().trim();
+          const qTingkatRaw = getVal(q, ['tingkat', 'kelas', 'tingkatan']);
           const parentMateri = dataMateri.find(m => {
             let idM = getVal(m, ['idmateri', 'id_materi', 'materiid']);
-            return idM && idM.toString().trim() === originalMid;
+            if (!idM || idM.toString().trim() !== originalMid) return false;
+            
+            let mTingkat = getTingkatSync(m);
+            if (qTingkatRaw != null && qTingkatRaw.toString().trim() !== "") {
+              let sTingkat = getTingkatSync({ tingkat: qTingkatRaw });
+              return mTingkat === sTingkat || mTingkat === "SEMUA";
+            }
+            return mTingkat === targetTingkat || mTingkat === "SEMUA";
           });
           
           let qTingkat = "";
@@ -2435,7 +2452,16 @@
         const studentAttempts = dataNilai.filter(n => {
           const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
           let pNilai = getVal(n, ['nilai', 'skor', 'point']);
-          return nMid === selMateri && pNilai !== undefined && pNilai !== null && pNilai !== "";
+          
+          if (nMid !== selMateri) return false;
+          if (pNilai === undefined || pNilai === null || pNilai === "") return false;
+          
+          let studentKelas = getVal(n, ['kelas', 'tingkat']) || "";
+          let studentTingkat = getPureTingkat(studentKelas);
+          let targetPureTingkat = getPureTingkat(targetTingkat);
+          
+          if (targetPureTingkat === "SEMUA" || targetPureTingkat === "") return true;
+          return studentTingkat === targetPureTingkat;
         });
         
         totalSiswaAnalyzed = studentAttempts.length;
@@ -2450,7 +2476,16 @@
         const attemptsGlobal = dataNilai.filter(n => {
           const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
           let pNilai = getVal(n, ['nilai', 'skor', 'point']);
-          return relatedMateriIds.has(nMid) && pNilai !== undefined && pNilai !== null && pNilai !== "";
+          
+          if (!relatedMateriIds.has(nMid)) return false;
+          if (pNilai === undefined || pNilai === null || pNilai === "") return false;
+          
+          let studentKelas = getVal(n, ['kelas', 'tingkat']) || "";
+          let studentTingkat = getPureTingkat(studentKelas);
+          let targetPureTingkat = getPureTingkat(targetTingkat);
+          
+          if (targetPureTingkat === "SEMUA" || targetPureTingkat === "") return true;
+          return studentTingkat === targetPureTingkat;
         });
         
         totalSiswaAnalyzed = attemptsGlobal.length;
@@ -2490,14 +2525,20 @@
           let idM = getVal(m, ['idmateri', 'id_materi', 'materiid']);
           if (!idM || idM.toString().trim() !== originalMid) return false;
           
+          let mTingkat = getTingkatSync(m);
+          if (!isGlobalTingkat) {
+            return mTingkat === targetTingkat || mTingkat === "SEMUA";
+          }
+          
           if (qTingkatRaw != null && qTingkatRaw.toString().trim() !== "") {
-            let mTingkat = getTingkatSync(m);
             let sTingkat = getTingkatSync({ tingkat: qTingkatRaw });
             return mTingkat === sTingkat || mTingkat === "SEMUA";
           }
           return true;
         });
         const tagMateri = originalJudulMateri ? getVal(originalJudulMateri, ['judul', 'materi']) : "Materi ID: " + originalMid;
+        
+        const parentTingkat = originalJudulMateri ? getTingkatSync(originalJudulMateri) : targetTingkat;
         
         // Cari siswa yang mengerjakan kuis khusus untuk soal ini
         const thisQuestAttempts = dataNilai.filter(n => {
@@ -2507,14 +2548,12 @@
           if (nMid !== originalMid) return false;
           if (pNilai === undefined || pNilai === null || pNilai === "") return false;
           
-          // Sangat krusial: Filter attempts berdasarkan tingkat kelas siswa agar data tidak tercampur kuis kelas lain dengan ID yang sama
-          if (qTingkatRaw != null && qTingkatRaw.toString().trim() !== "") {
-             let sTingkat = getTingkatSync({ tingkat: qTingkatRaw });
-             let studentKelas = getVal(n, ['kelas', 'tingkat']);
-             let studentTingkat = getTingkatSync({ kelas: studentKelas });
-             return studentTingkat === sTingkat;
-          }
-          return true;
+          let studentKelas = getVal(n, ['kelas', 'tingkat']) || "";
+          let studentTingkat = getPureTingkat(studentKelas);
+          let targetPureTingkat = getPureTingkat(parentTingkat);
+          
+          if (targetPureTingkat === "SEMUA" || targetPureTingkat === "") return true;
+          return studentTingkat === targetPureTingkat;
         });
         
         let P = 0, D = 0, rVal = 0;
@@ -2541,7 +2580,6 @@
           let totalScores = [];
           
           // Cari index soal asli di kuis ini untuk fallback (jika tidak ada urutan_soal)
-          let parentTingkat = originalJudulMateri ? getTingkatSync(originalJudulMateri) : targetTingkat;
           const quizAllQuestions = allSoal.filter(sq => {
             const sqMid = (getVal(sq, ['id_materi', 'idmateri', 'materiid']) || "").toString().trim();
             if (sqMid !== originalMid) return false;

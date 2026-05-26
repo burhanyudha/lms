@@ -2388,18 +2388,32 @@
       let filteredSoal = [];
       if (isGlobalTingkat) {
         filteredSoal = allSoal.filter(q => {
-          const qTingkat = (getVal(q, ['tingkat', 'kelas', 'tingkatan']) || "").toString().trim().toUpperCase();
+          const originalMid = (getVal(q, ['id_materi', 'idmateri', 'materiid']) || "").toString().trim();
+          const parentMateri = dataMateri.find(m => {
+            let idM = getVal(m, ['idmateri', 'id_materi', 'materiid']);
+            return idM && idM.toString().trim() === originalMid;
+          });
+          
+          let qTingkat = "";
+          if (parentMateri) {
+            qTingkat = getTingkatSync(parentMateri);
+          } else {
+            qTingkat = getTingkatSync(q);
+          }
           return qTingkat === targetTingkat;
         });
       } else {
         filteredSoal = allSoal.filter(q => {
           const qMidRaw = getVal(q, ['id_materi', 'idmateri', 'materiid', 'materi_id']);
           const qMid = qMidRaw ? qMidRaw.toString().trim() : "";
-          const qTingkat = (getVal(q, ['tingkat', 'kelas', 'tingkatan']) || "").toString().trim().toUpperCase();
+          if (qMid !== selMateri) return false;
           
-          let matchId = (qMid == selMateri);
-          let matchTingkat = (qTingkat === "" || qTingkat === "SEMUA" || qTingkat === targetTingkat);
-          return matchId && matchTingkat;
+          const qTingkatRaw = getVal(q, ['tingkat', 'kelas', 'tingkatan']);
+          if (qTingkatRaw != null && qTingkatRaw.toString().trim() !== "") {
+            const soalTingkat = getTingkatSync({ tingkat: qTingkatRaw });
+            return (soalTingkat === targetTingkat || soalTingkat === "SEMUA");
+          }
+          return true;
         });
       }
       
@@ -2508,10 +2522,16 @@
           let totalScores = [];
           
           // Cari index soal asli di kuis ini untuk fallback (jika tidak ada urutan_soal)
+          let parentTingkat = originalJudulMateri ? getTingkatSync(originalJudulMateri) : targetTingkat;
           const quizAllQuestions = allSoal.filter(sq => {
             const sqMid = (getVal(sq, ['id_materi', 'idmateri', 'materiid']) || "").toString().trim();
-            const sqTingkat = (getVal(sq, ['tingkat', 'kelas', 'tingkatan']) || "").toString().trim().toUpperCase();
-            return sqMid === originalMid && (sqTingkat === "" || sqTingkat === "SEMUA" || sqTingkat === targetTingkat);
+            if (sqMid !== originalMid) return false;
+            const sqTingkatRaw = getVal(sq, ['tingkat', 'kelas', 'tingkatan']);
+            if (sqTingkatRaw != null && sqTingkatRaw.toString().trim() !== "") {
+              const soalTingkat = getTingkatSync({ tingkat: sqTingkatRaw });
+              return (soalTingkat === parentTingkat || soalTingkat === "SEMUA");
+            }
+            return true;
           });
           const originalIndexInQuiz = quizAllQuestions.findIndex(sq => (getVal(sq, ['id']) || "").toString().trim() === qId);
           

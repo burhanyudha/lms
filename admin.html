@@ -633,7 +633,10 @@
             <h1>Rekap Nilai & Progres</h1>
             <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">Lihat seluruh progres pengerjaan materi siswa per kelas.</p>
           </div>
-          <button class="btn btn-primary" onclick="downloadRekap()"><i data-lucide="download"></i> Download XLSX</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="downloadRekap()"><i data-lucide="download"></i> Download XLSX</button>
+            <button class="btn btn-outline" onclick="downloadSemuaKelas()"><i data-lucide="layers"></i> Semua Kelas</button>
+          </div>
         </div>
 
         <div class="card">
@@ -2396,6 +2399,120 @@
 
       // Simpan file .xlsx
       XLSX.writeFile(wb, "Rekap_Nilai_" + selKelas + ".xlsx");
+    }
+
+    function buildRekapAoa(selKelas) {
+      const norm = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+      const students = dataUser
+        .filter(u => norm(getVal(u, ['kelas', 'tingkat'])) === norm(selKelas))
+        .sort((a, b) => (getVal(a, ['nama']) || "").localeCompare(getVal(b, ['nama']) || ""));
+
+      const myTingkat = getTingkatSync({ kelas: selKelas });
+      const materials = dataMateri.filter(m => {
+        const mTingkat = getTingkatSync(m);
+        return mTingkat === myTingkat || mTingkat === "SEMUA";
+      });
+
+      if (students.length === 0 || materials.length === 0) return null;
+
+      // Header row
+      const header = ['Nama Siswa', ...materials.map(m => getVal(m, ['judul', 'materi']) || 'Materi'), 'Total', 'Rata-rata'];
+      const aoa = [header];
+
+      students.forEach(s => {
+        const username = norm(getVal(s, ['username', 'nisn']));
+        const nama = getVal(s, ['nama']) || username;
+        const row = [nama];
+        let totalScore = 0, countScored = 0;
+
+        materials.forEach((m, idx) => {
+          const mid = (idx + 1).toString();
+          const mJudul = norm(getVal(m, ['judul', 'materi']));
+          const tipe = (getVal(m, ['tipeevaluasi', 'tipe_evaluasi', 'tipe']) || 'Praktik').toLowerCase();
+
+          if (tipe === 'materi') {
+            row.push('✓');
+            return;
+          }
+
+          const upload = dataLogTugas.find(t => {
+            const tUser = norm(getVal(t, ['username']));
+            const tMid = (getVal(t, ['id_materi', 'materi']) || '').toString().trim();
+            const tJudul = norm(getVal(t, ['materi', 'judul']));
+            return tUser === username && (tMid === mid || (mJudul !== '' && tJudul === mJudul));
+          });
+
+          const filteredNilai = dataNilai.filter(n => {
+            const nUser = norm(getVal(n, ['username', 'nisn']));
+            const nMid = (getVal(n, ['id_materi', 'idmateri']) || '').toString().trim();
+            const nJudul = norm(getVal(n, ['judul', 'materi', 'judul_materi']));
+            return nUser === username && (nMid === mid || (mJudul !== '' && nJudul === mJudul));
+          });
+
+          if (filteredNilai.length > 0) {
+            const scores = filteredNilai.map(n => parseInt(getVal(n, ['nilai', 'skor']) || 0)).filter(v => !isNaN(v));
+            if (scores.length > 0) {
+              const maxS = Math.max(...scores);
+              totalScore += maxS;
+              countScored++;
+              row.push(maxS);
+            } else {
+              row.push('');
+            }
+          } else if (upload) {
+            row.push('Terkirim');
+          } else {
+            row.push('');
+          }
+        });
+
+        const avg = countScored > 0 ? Math.round(totalScore / countScored) : 0;
+        row.push(totalScore);
+        row.push(avg);
+        aoa.push(row);
+      });
+
+      return aoa;
+    }
+
+    function downloadSemuaKelas() {
+      const kelasList = [...new Set(dataUser.map(u => (getVal(u, ['kelas', 'tingkat']) || '').toString().trim()))]
+        .filter(k => k !== '')
+        .sort();
+
+      if (kelasList.length === 0) return alert('Data kelas belum tersedia!');
+
+      const wb = XLSX.utils.book_new();
+      let sheetCount = 0;
+
+      kelasList.forEach(kelas => {
+        const aoa = buildRekapAoa(kelas);
+        if (!aoa) return;
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Auto-lebar kolom
+        const colWidths = aoa[0].map((_, colIdx) => {
+          let maxLen = 0;
+          aoa.forEach(row => {
+            const cellLen = row[colIdx] ? row[colIdx].toString().length : 0;
+            if (cellLen > maxLen) maxLen = cellLen;
+          });
+          return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+        });
+        ws['!cols'] = colWidths;
+
+        // Nama sheet: maksimal 31 karakter (batas Excel)
+        const sheetName = kelas.substring(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        sheetCount++;
+      });
+
+      if (sheetCount === 0) return alert('Tidak ada data rekap yang bisa diekspor!');
+
+      const now = new Date();
+      const tgl = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+      XLSX.writeFile(wb, `Rekap_Nilai_Semua_Kelas_${tgl}.xlsx`);
     }
 
     // ============================================

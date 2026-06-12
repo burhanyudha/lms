@@ -8,6 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
   <script src="pwa-handler.js" defer></script>
 
@@ -632,7 +633,7 @@
             <h1>Rekap Nilai & Progres</h1>
             <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">Lihat seluruh progres pengerjaan materi siswa per kelas.</p>
           </div>
-          <button class="btn btn-primary" onclick="downloadRekap()"><i data-lucide="download"></i> Download CSV</button>
+          <button class="btn btn-primary" onclick="downloadRekap()"><i data-lucide="download"></i> Download XLSX</button>
         </div>
 
         <div class="card">
@@ -2357,24 +2358,44 @@
     function downloadRekap() {
       let selKelas = document.getElementById('filterKelasRekap').value;
       if(!selKelas) return alert("Pilih kelas terlebih dahulu!");
-      
+
       let table = document.querySelector("#rekapSection table");
       let rows = table.querySelectorAll("tr");
-      let csv = [];
+
+      // Kumpulkan data dari tabel sebagai array of arrays
+      let aoa = [];
       for (let i = 0; i < rows.length; i++) {
-        let row = [], cols = rows[i].querySelectorAll("td, th");
-        for (let j = 0; j < cols.length; j++) row.push('"' + cols[j].innerText.replace(/"/g, '""').split('\n')[0] + '"');
-        csv.push(row.join(","));
+        let row = [];
+        let cols = rows[i].querySelectorAll("td, th");
+        for (let j = 0; j < cols.length; j++) {
+          let text = cols[j].innerText.split('\n')[0].trim();
+          // Coba konversi ke angka jika memungkinkan (untuk kolom nilai)
+          let num = Number(text);
+          row.push(text !== '' && !isNaN(num) && i > 0 && j > 1 ? num : text);
+        }
+        aoa.push(row);
       }
-      let csvContent = "\ufeff" + csv.join("\n"); // Add BOM for Excel UTF-8
-      let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      let url = URL.createObjectURL(blob);
-      let link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", "Rekap_Nilai_" + selKelas + ".csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+
+      // Buat worksheet dari array of arrays
+      let ws = XLSX.utils.aoa_to_sheet(aoa);
+
+      // Auto-lebar kolom berdasarkan konten
+      let colWidths = aoa[0].map((_, colIdx) => {
+        let maxLen = 0;
+        aoa.forEach(row => {
+          let cellLen = row[colIdx] ? row[colIdx].toString().length : 0;
+          if (cellLen > maxLen) maxLen = cellLen;
+        });
+        return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+      });
+      ws['!cols'] = colWidths;
+
+      // Buat workbook dan tambahkan sheet
+      let wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Rekap Nilai");
+
+      // Simpan file .xlsx
+      XLSX.writeFile(wb, "Rekap_Nilai_" + selKelas + ".xlsx");
     }
 
     // ============================================

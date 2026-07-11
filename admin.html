@@ -185,7 +185,7 @@
         <div class="dropdown-item" style="border-bottom:1px solid var(--border-color); cursor:default;">
           <div style="display:flex; flex-direction:column">
             <span id="admin-name" style="font-weight:600; font-size:0.85rem;">Admin Utama</span>
-            <span style="font-size:0.75rem; color:var(--text-muted)">Administrator</span>
+            <span id="admin-role" style="font-size:0.75rem; color:var(--text-muted)">Administrator</span>
           </div>
         </div>
         <button class="dropdown-item logout-text" onclick="logout()"><i data-lucide="log-out"></i> Keluar</button>
@@ -741,6 +741,10 @@
 
   <script>
     // ===== CEK LOGIN ADMIN =====
+    let IS_SUPER_ADMIN = true;
+    let MY_MAPEL = "";
+    let MY_KELAS = [];
+
     const adminSession = localStorage.getItem("admin_user");
     if (!adminSession) {
         window.location.href = "login-admin.html";
@@ -749,7 +753,28 @@
             const adminData = JSON.parse(adminSession);
             document.getElementById('admin-name').innerText = adminData.nama || adminData.username || "Admin";
             document.getElementById('avatar-toggle').innerText = (adminData.nama || adminData.username || "A").charAt(0).toUpperCase();
-        } catch(e) {}
+            
+            // Tentukan role & mapel/kelas yang diampu
+            const role = (adminData.role || "").toString().toLowerCase();
+            IS_SUPER_ADMIN = (role === "superadmin" || role === "administrator");
+            MY_MAPEL = (adminData.mapel || "").toString().trim();
+            const kelasRaw = (adminData.kelas || "").toString().trim();
+            MY_KELAS = kelasRaw ? kelasRaw.split(',').map(k => k.trim().toUpperCase()) : [];
+
+            // Update text role di dropdown profil
+            const roleText = IS_SUPER_ADMIN ? "Super Admin" : `Guru - ${MY_MAPEL}`;
+            document.getElementById('admin-role').innerText = roleText;
+
+            // Sembunyikan menu yang dibatasi jika bukan superadmin
+            if (!IS_SUPER_ADMIN) {
+                const menuPengguna = document.getElementById('tabUsersD');
+                const menuPengaturan = document.getElementById('tabSettingsD');
+                if (menuPengguna) menuPengguna.style.display = 'none';
+                if (menuPengaturan) menuPengaturan.style.display = 'none';
+            }
+        } catch(e) {
+            console.error("Gagal parsing session admin", e);
+        }
     }
     // ============================
 
@@ -935,6 +960,45 @@
         dataLogLogin = await resL.json();
         dataSettings = await resS.json();
         dataLogTugas = await resT.json();
+
+        // Penyaringan Data Global untuk Guru Biasa
+        if (!IS_SUPER_ADMIN) {
+          // 1. Filter Siswa berdasarkan kelas yang diajar oleh guru
+          dataUser = dataUser.filter(u => {
+             let k = (getVal(u, ['kelas', 'tingkat']) || "").toString().trim().toUpperCase();
+             return MY_KELAS.includes(k);
+          });
+
+          // 2. Filter Materi berdasarkan mapel & tingkat kelas dari kelas guru
+          const myTingkat = MY_KELAS.map(k => getTingkatFromKelas(k));
+          dataMateri = dataMateri.filter(m => {
+             let mMapel = (getVal(m, ['mapel']) || "").toString().trim().toLowerCase();
+             let mKelas = (getVal(m, ['kelas', 'tingkat']) || "").toString().trim().toUpperCase();
+             let isMapelMatch = mMapel === MY_MAPEL.toLowerCase();
+             let isKelasMatch = mKelas === "SEMUA" || mKelas === "" || myTingkat.includes(mKelas);
+             return isMapelMatch && isKelasMatch;
+          });
+
+          // 3. Filter Nilai, Log Tugas, & Log Login agar hanya menyisakan siswa yang diajar oleh guru
+          const validUsernames = new Set(dataUser.map(u => (getVal(u, ['username', 'nisn']) || "").toString().trim().toLowerCase()));
+          const validNames = new Set(dataUser.map(u => (getVal(u, ['nama']) || "").toString().trim().toLowerCase()));
+
+          dataNilai = dataNilai.filter(n => {
+             let user = (getVal(n, ['username', 'nisn']) || "").toString().trim().toLowerCase();
+             let nama = (getVal(n, ['nama', 'namasiswa']) || "").toString().trim().toLowerCase();
+             return validUsernames.has(user) || validNames.has(nama);
+          });
+
+          dataLogTugas = dataLogTugas.filter(t => {
+             let user = (getVal(t, ['username']) || "").toString().trim().toLowerCase();
+             return validUsernames.has(user);
+          });
+
+          dataLogLogin = dataLogLogin.filter(l => {
+             let user = (getVal(l, ['username', 'nisn']) || "").toString().trim().toLowerCase();
+             return validUsernames.has(user);
+          });
+        }
         
         if (Array.isArray(dataSettings)) {
           let folderSetting = dataSettings.find(s => getVal(s, ['key', 'pengaturan']) === "FOLDER_TUGAS");
@@ -1210,7 +1274,16 @@
       document.getElementById('mJudul').value = "";
       document.getElementById('mDeskripsi').value = "";
       document.getElementById('mLink').value = "";
-      document.getElementById('mMapel').value = "";
+      
+      const mapelInput = document.getElementById('mMapel');
+      if (!IS_SUPER_ADMIN) {
+        mapelInput.value = MY_MAPEL;
+        mapelInput.disabled = true;
+      } else {
+        mapelInput.value = "";
+        mapelInput.disabled = false;
+      }
+
       document.getElementById('mKelas').value = "";
       document.getElementById('mTipe').value = "Praktik";
       document.getElementById('mStatus').value = "Aktif";
@@ -1241,7 +1314,11 @@
       document.getElementById('mJudul').value = getVal(m, ['judul', 'materi', 'namamateri']) || "";
       document.getElementById('mDeskripsi').value = getVal(m, ['deskripsi', 'keterangan']) || "";
       document.getElementById('mLink').value = getVal(m, ['link', 'url']) || "";
-      document.getElementById('mMapel').value = getVal(m, ['mapel', 'matapelajaran']) || "";
+      
+      const mapelInput = document.getElementById('mMapel');
+      mapelInput.value = getVal(m, ['mapel', 'matapelajaran']) || "";
+      mapelInput.disabled = !IS_SUPER_ADMIN;
+
       document.getElementById('mKelas').value = getVal(m, ['kelas', 'tingkat']) || "";
       document.getElementById('mTipe').value = getVal(m, ['tipe', 'tipeevaluasi', 'tipe_evaluasi']) || "Praktik";
       document.getElementById('mStatus').value = getVal(m, ['status']) || "Aktif";
@@ -1268,6 +1345,9 @@
       let descVal = document.getElementById('mDeskripsi').value;
       let linkVal = document.getElementById('mLink').value;
       let mapelVal = document.getElementById('mMapel').value;
+      if (!IS_SUPER_ADMIN) {
+        mapelVal = MY_MAPEL;
+      }
       let kelasVal = document.getElementById('mKelas').value;
       let tipeVal = document.getElementById('mTipe').value;
       let statusVal = document.getElementById('mStatus').value;

@@ -920,7 +920,11 @@
 
     function handleSort(table, col) {
       if (sortState[table].col === col) {
-        sortState[table].asc = !sortState[table].asc;
+        if (sortState[table].asc === true) {
+          sortState[table].asc = false;
+        } else {
+          sortState[table].col = ''; // Reset sort
+        }
       } else {
         sortState[table].col = col;
         sortState[table].asc = true;

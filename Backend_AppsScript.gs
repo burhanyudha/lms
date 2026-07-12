@@ -374,6 +374,48 @@ function doPost(e) {
     }
 
     // ===============================================
+    // ACTION: REORDER DATA (DRAG AND DROP)
+    // ===============================================
+    if (action === "reorderData") {
+      var sheet = ss.getSheetByName(postData.sheetName);
+      if (!sheet) throw new Error("Sheet tidak ditemukan");
+      
+      var newOrder = postData.newOrder; // Array of row numbers (1-based index from sheet)
+      if (!newOrder || !Array.isArray(newOrder)) throw new Error("Invalid newOrder format");
+      
+      var allData = sheet.getDataRange().getValues();
+      var headers = allData[0];
+      var newDataRows = [];
+      
+      var processedRows = new Set();
+      
+      // Masukkan data berdasarkan urutan baru
+      for (var i = 0; i < newOrder.length; i++) {
+        var rIdx = newOrder[i] - 1; // Konversi rowNumber (Google Sheet) ke array index (0-based)
+        if (rIdx > 0 && rIdx < allData.length) {
+          newDataRows.push(allData[rIdx]);
+          processedRows.add(rIdx);
+        }
+      }
+      
+      // Masukkan baris lain yang mungkin tidak ikut di-reorder (misal disembunyikan filter)
+      // Taruh di bawah (atau di posisinya) agar data tidak hilang
+      for (var i = 1; i < allData.length; i++) {
+        if (!processedRows.has(i)) {
+          newDataRows.push(allData[i]);
+        }
+      }
+      
+      if (newDataRows.length > 0) {
+        // Timpa data mulai dari baris ke-2
+        sheet.getRange(2, 1, newDataRows.length, headers.length).setValues(newDataRows);
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Urutan berhasil diperbarui" }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // ===============================================
     // ACTION 4: ADD / EDIT DATA (ADMIN PANEL)
     // ===============================================
     if (action === "saveData") {

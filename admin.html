@@ -8,6 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
   <script src="pwa-handler.js" defer></script>
@@ -481,6 +482,7 @@
               <option value="XI">Kelas XI</option>
               <option value="XII">Kelas XII</option>
             </select>
+            <button id="btnSaveOrder" class="btn btn-primary" style="display:none;" onclick="saveMateriOrder()"><i data-lucide="save"></i> Simpan Urutan</button>
           </div>
           <div class="table-responsive">
             <table>
@@ -1316,7 +1318,7 @@
         // Cari index asli di dataMateri untuk fungsi Edit
         const realIdx = dataMateri.findIndex(item => item.rowNumber === m.rowNumber);
 
-        html += `<tr>
+        html += `<tr data-rownum="${m.rowNumber}">
           <td style="font-family:monospace; font-weight:bold; color:var(--primary); text-align:center;">${displayId}</td>
           <td>
             <div style="font-weight:600">${judul}</div>
@@ -1336,6 +1338,76 @@
       });
       document.getElementById('materiTableBody').innerHTML = html || '<tr><td colspan="4" style="text-align:center">Tidak ada data</td></tr>';
       lucide.createIcons();
+      initSortableMateri();
+    }
+
+    let sortableMateri = null;
+    function initSortableMateri() {
+      let q = document.getElementById('searchMateri').value.trim();
+      let fTingkat = document.getElementById('filterTingkatMateri').value;
+      let isSorted = sortState.materi.col !== '';
+
+      let tbody = document.getElementById('materiTableBody');
+      let btnSaveOrder = document.getElementById('btnSaveOrder');
+
+      // Hanya aktifkan drag-and-drop jika TIDAK ADA filter/sort
+      let canDragAndDrop = (q === '' && fTingkat === '' && !isSorted);
+
+      if (sortableMateri) {
+        sortableMateri.destroy();
+        sortableMateri = null;
+      }
+      
+      btnSaveOrder.style.display = 'none';
+
+      if (canDragAndDrop) {
+        sortableMateri = new Sortable(tbody, {
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          onEnd: function (evt) {
+            btnSaveOrder.style.display = 'inline-flex';
+          }
+        });
+      }
+    }
+
+    async function saveMateriOrder() {
+      let tbody = document.getElementById('materiTableBody');
+      let rows = tbody.querySelectorAll('tr[data-rownum]');
+      let newOrder = [];
+      rows.forEach(tr => {
+        newOrder.push(parseInt(tr.getAttribute('data-rownum')));
+      });
+
+      if (newOrder.length === 0) return;
+
+      showOverlay("Menyimpan urutan materi...");
+      try {
+        let payload = {
+          action: "reorderData",
+          sheetName: "materi",
+          newOrder: newOrder
+        };
+
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        });
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+          alert("Urutan berhasil disimpan!");
+          document.getElementById('btnSaveOrder').style.display = 'none';
+          loadAllData(); // Reload data dari server
+        } else {
+          alert("Gagal: " + result.message);
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Terjadi kesalahan koneksi.");
+      }
+      hideOverlay();
     }
 
     function openModalMateri() {

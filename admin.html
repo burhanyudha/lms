@@ -1018,13 +1018,14 @@
     async function loadAllData() {
       showOverlay("Mengambil data dari Spreadsheet...");
       try {
+        const t = new Date().getTime(); // Cache buster
         const [resM, resN, resU, resL, resS, resT] = await Promise.all([
-          fetch(`${API_URL}?sheet=materi`),
-          fetch(`${API_URL}?sheet=listNilai`),
-          fetch(`${API_URL}?sheet=user`),
-          fetch(`${API_URL}?sheet=logLogin`),
-          fetch(`${API_URL}?sheet=settings`),
-          fetch(`${API_URL}?sheet=logTugas`).catch(() => ({ json: async () => [] }))
+          fetch(`${API_URL}?sheet=materi&_t=${t}`),
+          fetch(`${API_URL}?sheet=listNilai&_t=${t}`),
+          fetch(`${API_URL}?sheet=user&_t=${t}`),
+          fetch(`${API_URL}?sheet=logLogin&_t=${t}`),
+          fetch(`${API_URL}?sheet=settings&_t=${t}`),
+          fetch(`${API_URL}?sheet=logTugas&_t=${t}`).catch(() => ({ json: async () => [] }))
         ]);
 
         dataMateri = await resM.json();

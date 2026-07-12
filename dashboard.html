@@ -829,12 +829,13 @@
 
       // 2. Fetch fresh data in background
       try {
+        const t = new Date().getTime(); // Cache buster
         const [resMateri, resListNilai, resUser, resLogTugas, resGuru] = await Promise.all([
-          fetch(`${API_URL}?sheet=materi`),
-          fetch(`${API_URL}?sheet=listNilai`).catch(() => ({ json: async () => [] })),
-          fetch(`${API_URL}?sheet=user`).catch(() => ({ json: async () => [] })),
-          fetch(`${API_URL}?sheet=logTugas`).catch(() => ({ json: async () => [] })),
-          fetch(`${API_URL}?sheet=public_guru`).catch(() => ({ json: async () => [] }))
+          fetch(`${API_URL}?sheet=materi&_t=${t}`),
+          fetch(`${API_URL}?sheet=listNilai&_t=${t}`).catch(() => ({ json: async () => [] })),
+          fetch(`${API_URL}?sheet=user&_t=${t}`).catch(() => ({ json: async () => [] })),
+          fetch(`${API_URL}?sheet=logTugas&_t=${t}`).catch(() => ({ json: async () => [] })),
+          fetch(`${API_URL}?sheet=public_guru&_t=${t}`).catch(() => ({ json: async () => [] }))
         ]);
 
         const dataMateri = await resMateri.json();

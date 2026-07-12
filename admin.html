@@ -1291,7 +1291,14 @@
         let text = judul + " " + kelas;
         
         let matchSearch = text.toLowerCase().includes(q);
-        let matchTingkat = fTingkat === "" || getTingkatSync(m) === fTingkat;
+        
+        let listK = kelas.toString().trim().toUpperCase().split(',').map(k => k.trim());
+        let matchTingkat = false;
+        if (fTingkat === "") {
+            matchTingkat = true;
+        } else {
+            matchTingkat = listK.includes("SEMUA") || listK.some(k => getPureTingkat(k) === fTingkat);
+        }
         
         return matchSearch && matchTingkat;
       });

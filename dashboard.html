@@ -1422,7 +1422,14 @@
     }
 
     function openMateri(id) { window.location.href = "materi.html?id=" + id; }
-    function logout() { localStorage.removeItem("user"); window.location.href = "index.html"; }
+    function logout() { 
+      localStorage.removeItem("user"); 
+      localStorage.removeItem("cache_materi");
+      localStorage.removeItem("cache_listNilai");
+      localStorage.removeItem("cache_logTugas");
+      localStorage.removeItem("cache_lastUpdated");
+      window.location.href = "index.html"; 
+    }
 
     function openViewModal(url) {
       document.getElementById('viewFileModal').style.display = 'flex';

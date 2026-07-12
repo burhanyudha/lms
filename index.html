@@ -751,6 +751,10 @@
                     } catch(e) {}
 
                     updateMsg("Berhasil! Mengalihkan...", "#059669", "check-circle");
+                    localStorage.removeItem("cache_materi");
+                    localStorage.removeItem("cache_listNilai");
+                    localStorage.removeItem("cache_logTugas");
+                    localStorage.removeItem("cache_lastUpdated");
                     localStorage.setItem("user", JSON.stringify(user));
                     setTimeout(() => {
                         window.location.href = "dashboard.html";

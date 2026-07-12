@@ -893,11 +893,24 @@
       const list = document.getElementById("materiList");
       try {
         const myTingkat = getTingkat(user);
+        const myKelas = (user.kelas || user.Kelas || "").toString().trim().toUpperCase();
 
-        // FILTER FRONTEND: Hanya tampilkan materi yang se-tingkat dengan user
+        // FILTER FRONTEND: Hanya tampilkan materi yang ditujukan untuk kelas spesifik user atau tingkat generik
         const dataMateri = dataMateriMentah.filter(m => {
+          const mKelasMentah = (m.kelas || m.tingkat || m.Kelas || m.Tingkat || "").toString().trim().toUpperCase();
           const mTingkat = getTingkat(m);
-          return mTingkat === myTingkat || mTingkat === "SEMUA";
+          
+          if (mTingkat === "SEMUA" || mKelasMentah === "SEMUA" || mKelasMentah === "") return true;
+
+          let mKelasArray = mKelasMentah.split(',').map(k => k.trim());
+          
+          // 1. Cocok dengan kelas spesifik (misal: "X IPA 1")
+          if (myKelas && mKelasArray.includes(myKelas)) return true;
+          
+          // 2. Cocok dengan tingkat generik (misal: "X")
+          if (mKelasArray.includes(myTingkat)) return true;
+
+          return false;
         });
 
         // Isi dropdown mapel secara dinamis jika belum pernah diisi

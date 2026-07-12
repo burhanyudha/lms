@@ -409,10 +409,13 @@ function doPost(e) {
       if (newDataRows.length > 0) {
         // Timpa data mulai dari baris ke-2
         sheet.getRange(2, 1, newDataRows.length, headers.length).setValues(newDataRows);
+        SpreadsheetApp.flush(); // Force write to sheet
       }
       
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Urutan berhasil diperbarui" }))
-                           .setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ 
+        status: "success", 
+        message: "Urutan berhasil diperbarui"
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // ===============================================

@@ -1112,11 +1112,13 @@
           let btnPelajari = "";
           let btnKuis = "";
 
+          let textPelajari = (tipe === 'Praktik' || tipe === 'Ujian praktik') ? 'Jobsheet' : 'Pelajari';
+          let iconPelajari = (tipe === 'Praktik' || tipe === 'Ujian praktik') ? 'file-text' : 'play';
           btnPelajari = (link === "") 
             ? "" 
             : (isMateriLocked
                ? `<button class="btn-action" style="background:#f1f5f9; color:#94a3b8; cursor:not-allowed;" onclick="alertLocked('materi')"><i data-lucide="lock" style="width:14px"></i> Terkunci</button>`
-               : `<button class="btn-action btn-study" onclick="openMateri('${mid}')"><i data-lucide="play" style="width:14px"></i> Pelajari</button>`);
+               : `<button class="btn-action btn-study" onclick="openMateri('${mid}')"><i data-lucide="${iconPelajari}" style="width:14px"></i> ${textPelajari}</button>`);
 
           if (tipe === "Materi Saja" || tipe === "Tidak Ada" || tipe === "") {
               btnKuis = "";

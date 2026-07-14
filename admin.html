@@ -1585,6 +1585,7 @@
       // Optimistic update locally
       m.status = newStatus;
       if (m.Status) m.Status = newStatus;
+      if (m._norm) m._norm['status'] = newStatus;
       
       // Re-render the table instantly
       renderTableMateri();

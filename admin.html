@@ -1577,12 +1577,29 @@
     async function toggleMateriStatus(rowNum) {
       const idx = dataMateri.findIndex(m => m.rowNumber == rowNum);
       if(idx === -1) return;
+      
       let m = dataMateri[idx];
       let currentStatus = getVal(m, ['status']) || "Aktif";
       let newStatus = currentStatus.toString().toLowerCase() === "draft" ? "Aktif" : "Draft";
       
+      // Optimistic update locally
+      m.status = newStatus;
+      if (m.Status) m.Status = newStatus;
+      
+      // Re-render the table instantly
+      renderTableMateri();
+      
+      // Save to server in background
       let data = { ...m, status: newStatus };
-      await postData({ action: "saveData", sheet: "materi", rowNumber: rowNum, data: JSON.stringify(data) });
+      try {
+        fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: "saveData", sheet: "materi", rowNumber: rowNum, data: JSON.stringify(data) }),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        });
+      } catch(e) {
+        console.error("Gagal sinkron status materi:", e);
+      }
     }
 
     // ============================================

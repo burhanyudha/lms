@@ -932,9 +932,15 @@
 
         // Terapkan filter mapel dari dropdown
         const mapelSelected = selectMapel ? selectMapel.value : "";
-        const dataMateriFiltered = mapelSelected
+        let dataMateriFiltered = mapelSelected
           ? dataMateri.filter(m => (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || "").toString().trim().toLowerCase() === mapelSelected.toLowerCase())
           : dataMateri;
+
+        // Filter out draft materials so they don't appear for students
+        dataMateriFiltered = dataMateriFiltered.filter(m => {
+          let st = (m.status || m.Status || "Aktif").toString().toLowerCase();
+          return st !== "draft";
+        });
 
         // Filter progres hanya untuk user yang sedang login
         const userProgress = dataProgres.filter(p =>

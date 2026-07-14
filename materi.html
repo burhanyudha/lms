@@ -251,8 +251,18 @@
             embedUrl = `https://docs.google.com/presentation/d/${match[0]}/embed`;
           }
         }
-        if (!embedUrl.includes("?")) {
-          embedUrl += "?start=false&loop=false&delayms=3000";
+        
+        try {
+          let urlObj = new URL(embedUrl);
+          urlObj.searchParams.set("start", "false");
+          urlObj.searchParams.delete("delayms");
+          embedUrl = urlObj.toString();
+        } catch (e) {
+          if (embedUrl.includes("?")) {
+            embedUrl = embedUrl.replace(/start=true/g, "start=false").replace(/delayms=\d+/g, "");
+          } else {
+            embedUrl += "?start=false";
+          }
         }
         embed = `<iframe src="${embedUrl}" allowfullscreen></iframe>`;
       }

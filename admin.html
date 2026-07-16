@@ -2178,7 +2178,7 @@
       });
       let mJudulClean = mObj ? norm(getVal(mObj, ['judul', 'materi'])) : "";
       let rawTipe = mObj ? (getVal(mObj, ['tipeevaluasi', 'tipe_evaluasi', 'tipe']) || "Praktik").toLowerCase() : "praktik";
-      let isUploadType = ["praktik", "tugas", "ujian praktik"].includes(rawTipe);
+      let isUploadType = ["tugas"].includes(rawTipe);
 
       let mappedStudents = students.map((u, originalIndex) => {
         let username = (getVal(u, ['username', 'nisn']) || "").toString().trim();

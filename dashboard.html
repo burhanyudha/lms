@@ -624,6 +624,7 @@
     <button class="nav-item active" id="tabDashboardD" onclick="showTab('dashboard')"><i data-lucide="layout-grid"></i>
       Beranda</button>
     <button class="nav-item" id="tabMateriD" onclick="showTab('materi')"><i data-lucide="book-open"></i> Materi</button>
+    <button class="nav-item" id="tabPengumumanD" onclick="showTab('pengumuman')"><i data-lucide="bell"></i> Pengumuman</button>
     <button class="nav-item" id="tabRankingD" onclick="showTab('ranking')"><i data-lucide="award"></i>
       Peringkat</button>
   </aside>
@@ -632,6 +633,7 @@
     <button class="nav-item active" id="tabDashboard" onclick="showTab('dashboard')"><i data-lucide="home"></i>
       Beranda</button>
     <button class="nav-item" id="tabMateri" onclick="showTab('materi')"><i data-lucide="book-open"></i> Materi</button>
+    <button class="nav-item" id="tabPengumuman" onclick="showTab('pengumuman')"><i data-lucide="bell"></i> Pengumuman</button>
     <button class="nav-item" id="tabRanking" onclick="showTab('ranking')"><i data-lucide="award"></i> Peringkat</button>
   </nav>
 
@@ -736,6 +738,21 @@
                 <div class="skeleton" style="height: 36px; width: 100%; border-radius: 8px;"></div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PENGUMUMAN -->
+      <section id="pengumumanSection" style="display:none">
+        <div class="header-section">
+          <h1 style="margin:0; font-size:1.5rem;">Pengumuman</h1>
+          <p style="color:var(--text-muted); font-size:0.85rem; margin-top:4px;">Informasi terbaru dari sekolah atau guru.</p>
+        </div>
+        <div id="pengumumanList" style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Pengumuman items rendered here -->
+          <div style="text-align:center; padding:40px; color:var(--text-muted);">
+             <i data-lucide="bell" style="width:32px; height:32px; margin-bottom:8px; opacity:0.5;"></i>
+             <p>Tidak ada pengumuman saat ini.</p>
           </div>
         </div>
       </section>
@@ -879,7 +896,7 @@
     function toggleDropdown() { document.getElementById('profile-dropdown').classList.toggle('active'); }
 
     function showTab(tab) {
-      const sections = ['dashboard', 'materi', 'ranking'];
+      const sections = ['dashboard', 'materi', 'ranking', 'pengumuman'];
       sections.forEach(s => {
         document.getElementById(s + 'Section').style.display = (s === tab) ? 'block' : 'none';
         const btn = document.getElementById('tab' + s.charAt(0).toUpperCase() + s.slice(1));
@@ -941,6 +958,21 @@
           let st = (m.status || m.Status || "Aktif").toString().toLowerCase();
           return st !== "draft";
         });
+
+        // Pisahkan pengumuman dari materi
+        const pengumuman = [];
+        const materiAsli = [];
+        dataMateriFiltered.forEach(m => {
+           let tipe = getVal(m, ['tipeevaluasi', 'tipe', 'evaluasi', 'jenis']);
+           if (tipe && tipe.toString().trim().toLowerCase() === "pengumuman") {
+              pengumuman.push(m);
+           } else {
+              materiAsli.push(m);
+           }
+        });
+        
+        dataMateriFiltered = materiAsli;
+        renderPengumuman(pengumuman);
 
         // Filter progres hanya untuk user yang sedang login
         const userProgress = dataProgres.filter(p =>
@@ -1409,6 +1441,41 @@
       } else {
         fullList.innerHTML = filteredData.map(renderRankItemHTML).join('');
       }
+    }
+
+    function renderPengumuman(pengumuman) {
+      const list = document.getElementById("pengumumanList");
+      if (!list) return;
+
+      if (pengumuman.length === 0) {
+        list.innerHTML = `
+          <div style="text-align:center; padding:40px; color:var(--text-muted); background:white; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+             <i data-lucide="bell" style="width:32px; height:32px; margin-bottom:8px; opacity:0.5;"></i>
+             <p>Tidak ada pengumuman saat ini.</p>
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = pengumuman.map(p => {
+        let judul = getVal(p, ['judul', 'materi', 'namamateri']) || "Pengumuman";
+        let isi = getVal(p, ['deskripsi', 'keterangan']) || "-";
+        let mapel = getVal(p, ['mapel']) || "Umum";
+        
+        return \`
+          <div style="background:white; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.1); padding:20px; border-left:4px solid var(--primary);">
+             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                <div>
+                  <h3 style="margin:0 0 4px 0; font-size:1.1rem; font-weight:700; color:#1e293b;">\${judul}</h3>
+                  <span style="font-size:0.75rem; color:var(--primary); font-weight:600; background:var(--primary-light); padding:2px 8px; border-radius:12px;">\${mapel}</span>
+                </div>
+                <i data-lucide="info" style="color:var(--text-muted); width:20px;"></i>
+             </div>
+             <p style="margin:0; font-size:0.9rem; color:#475569; line-height:1.5;">\${isi.replace(/\\n/g, '<br>')}</p>
+          </div>
+        \`;
+      }).join('');
+      lucide.createIcons();
     }
 
     function renderRankItemHTML(u, i) {

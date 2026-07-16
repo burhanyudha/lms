@@ -133,6 +133,7 @@
         const idxParam = urlParams.get('idx') || idMateri;
 
         let allQuestions = [];
+        let originalQuestions = [];
         let currentIndex = 0;
         let userAnswers = [];
         let timerInterval;
@@ -294,6 +295,9 @@
                     if(q.opsi_e) opts.push({ key: 'e', text: q.opsi_e });
                     q.shuffledOptions = shuffleArray(opts);
                 });
+
+                // Simpan urutan asli ke originalQuestions sebelum diacak
+                originalQuestions = [...allQuestions];
 
                 // Acak urutan pertanyaan
                 allQuestions = shuffleArray(allQuestions);
@@ -527,6 +531,16 @@
             const username = userData.username || "Anonim";
             const nama = userData.nama || "Anonim";
 
+            let mappedAnswers = [];
+            originalQuestions.forEach(origQ => {
+                let currentIdx = allQuestions.findIndex(q => q.id === origQ.id);
+                if (currentIdx !== -1) {
+                    mappedAnswers.push(userAnswers[currentIdx] || "");
+                } else {
+                    mappedAnswers.push("");
+                }
+            });
+
             const payload = {
                 action: 'saveScore',
                 sheet: 'listNilai',
@@ -538,8 +552,8 @@
                     nilai: score,
                     waktu: "'" + waktuFormat, // Tambahkan kutip tunggal agar Google Sheet menjadikannya teks (mencegah format tanggal 1899)
                     timestamp: new Date().toISOString(),
-                    jawaban: userAnswers.map(ans => ans || ""),
-                    urutan_soal: allQuestions.map(q => q.id || "").join(",")
+                    jawaban: mappedAnswers,
+                    urutan_soal: originalQuestions.map(q => q.id || "").join(",")
                 }
             };
 

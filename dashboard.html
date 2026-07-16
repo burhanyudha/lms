@@ -811,6 +811,17 @@
       return t || "X";
     }
 
+    const getVal = (obj, possibleKeys) => {
+      for (const p of possibleKeys) {
+        const pNorm = p.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const key in obj) {
+          const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (normKey === pNorm && obj[key] !== undefined && obj[key] !== "") return obj[key];
+        }
+      }
+      return undefined;
+    };
+
     document.getElementById("welcomeText").innerText = "Halo, " + user.nama.split(' ')[0] + "!";
     document.getElementById("avatar-toggle").innerText = user.nama.charAt(0);
     document.getElementById("user-fullname").innerText = user.nama;
@@ -978,17 +989,6 @@
         const userProgress = dataProgres.filter(p =>
           p.username && p.username.toString().trim() === user.username.toString().trim()
         );
-
-        const getVal = (obj, possibleKeys) => {
-          for (const p of possibleKeys) {
-            const pNorm = p.toLowerCase().replace(/[^a-z0-9]/g, '');
-            for (const key in obj) {
-              const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (normKey === pNorm && obj[key] !== undefined && obj[key] !== "") return obj[key];
-            }
-          }
-          return undefined;
-        };
 
         // Peta URL Tugas dari logTugas (terpisah dari logNilai numerik)
         const taskUrls = new Map();

@@ -1120,15 +1120,17 @@
 
           let textPelajari = (tipe === 'Praktik' || tipe === 'Ujian praktik') ? 'Jobsheet' : 'Pelajari';
           let iconPelajari = (tipe === 'Praktik' || tipe === 'Ujian praktik') ? 'file-text' : 'play';
+          let isMateriSaja = (tipe.toLowerCase() === "materi saja" || tipe.toLowerCase() === "materi" || tipe.toLowerCase() === "tidak ada" || tipe === "");
+          
           btnPelajari = (link === "") 
             ? "" 
             : (isMateriLocked
-               ? `<button class="btn-action" style="background:#f1f5f9; color:#94a3b8; cursor:not-allowed;" onclick="alertLocked('materi')"><i data-lucide="lock" style="width:14px"></i> Terkunci</button>`
-               : `<button class="btn-action btn-study" onclick="openMateri('${mid}')"><i data-lucide="${iconPelajari}" style="width:14px"></i> ${textPelajari}</button>`);
+               ? `<button class="btn-action" style="background:#f1f5f9; color:#94a3b8; cursor:not-allowed; ${isMateriSaja ? 'grid-column: 1 / -1;' : ''}" onclick="alertLocked('materi')"><i data-lucide="lock" style="width:14px"></i> Terkunci</button>`
+               : `<button class="btn-action btn-study" style="${isMateriSaja ? 'grid-column: 1 / -1;' : ''}" onclick="openMateri('${mid}')"><i data-lucide="${iconPelajari}" style="width:14px"></i> ${textPelajari}</button>`);
 
-          if (tipe === "Materi Saja" || tipe === "Tidak Ada" || tipe === "") {
+          if (isMateriSaja) {
               btnKuis = "";
-          } else if (tipe === "Praktik" || tipe === "Ujian praktik") {
+          } else if (tipe.toLowerCase() === "praktik" || tipe.toLowerCase() === "ujian praktik") {
             if (hasScore) {
               btnKuis = `<button class="btn-action" style="background:#d1fae5; color:#059669; border:1px solid #a7f3d0; cursor:default; ${btnPelajari === '' ? 'grid-column: 1 / -1;' : ''}"><i data-lucide="check-circle" style="width:16px; flex-shrink:0;"></i> <span style="white-space:normal; line-height:1.1;">Lulus</span></button>`;
             } else {
@@ -1137,7 +1139,7 @@
           } else {
             btnKuis = isKuisLocked
                 ? `<button class="btn-action" style="background:#f1f5f9; color:#94a3b8; cursor:not-allowed; border:1px solid #e2e8f0; ${btnPelajari === '' ? 'grid-column: 1 / -1;' : ''}" onclick="alertLocked('${tipe.toLowerCase()}')"><i data-lucide="lock" style="width:14px"></i> ${tipe} Terkunci</button>`
-                : `<button class="btn-action btn-quiz" style="${btnPelajari === '' ? 'grid-column: 1 / -1;' : ''}" onclick="handleEvaluasi('${tipe}', '${mid}', encodeURIComponent(\`${m.judul || m.Judul || ("Materi " + (i + 1))}\`), '${mid}')"><i data-lucide="${tipe === 'Kuis' ? 'edit-2' : (tipe.toLowerCase() === 'survey' ? 'clipboard-list' : (tipe.toLowerCase() === 'editor' ? 'type' : 'upload'))}" style="width:14px"></i> ${hasScore ? 'Ulangi ' + tipe : 'Kerjakan ' + tipe}</button>`;
+                : `<button class="btn-action btn-quiz" style="${btnPelajari === '' ? 'grid-column: 1 / -1;' : ''}" onclick="handleEvaluasi('${tipe}', '${mid}', encodeURIComponent(\`${m.judul || m.Judul || ("Materi " + (i + 1))}\`), '${mid}')"><i data-lucide="${tipe.toLowerCase() === 'kuis' ? 'edit-2' : (tipe.toLowerCase() === 'survey' ? 'clipboard-list' : (tipe.toLowerCase() === 'editor' ? 'type' : 'upload'))}" style="width:14px"></i> ${hasScore ? 'Ulangi ' + tipe : 'Kerjakan ' + tipe}</button>`;
           }
 
           let viewBtnHTML = "";

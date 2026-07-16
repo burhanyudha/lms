@@ -2584,11 +2584,25 @@
       // 1. Ambil Siswa di Kelas Ini
       const students = dataUser.filter(u => norm(getVal(u, ['kelas', 'tingkat'])) === norm(selKelas));
       
-      // 2. Ambil Materi yang Sesuai (Filter by Tingkat) - DISINKRONKAN DENGAN dashboard.html
+      // 2. Ambil Materi yang Sesuai (Filter by Tingkat, Status Aktif) - DISINKRONKAN DENGAN dashboard.html
       const myTingkat = getTingkatSync({ kelas: selKelas });
+      const selKelasUpper = selKelas.toUpperCase();
+
       const materials = dataMateri.filter(m => {
+        const mStatus = (getVal(m, ['status']) || "Aktif").toString().toLowerCase();
+        if (mStatus !== "aktif") return false;
+
+        const mKelasMentah = (getVal(m, ['kelas', 'tingkat']) || "").toString().trim().toUpperCase();
         const mTingkat = getTingkatSync(m);
-        return mTingkat === myTingkat || mTingkat === "SEMUA";
+        
+        if (mTingkat === "SEMUA" || mKelasMentah === "SEMUA" || mKelasMentah === "") return true;
+
+        let mKelasArray = mKelasMentah.split(',').map(k => k.trim());
+        
+        if (selKelasUpper && mKelasArray.includes(selKelasUpper)) return true;
+        if (mKelasArray.includes(myTingkat)) return true;
+
+        return false;
       });
 
       // 3. Render Header
@@ -2732,9 +2746,23 @@
         .sort((a, b) => (getVal(a, ['nama']) || "").localeCompare(getVal(b, ['nama']) || ""));
 
       const myTingkat = getTingkatSync({ kelas: selKelas });
+      const selKelasUpper = selKelas.toUpperCase();
+
       const materials = dataMateri.filter(m => {
+        const mStatus = (getVal(m, ['status']) || "Aktif").toString().toLowerCase();
+        if (mStatus !== "aktif") return false;
+
+        const mKelasMentah = (getVal(m, ['kelas', 'tingkat']) || "").toString().trim().toUpperCase();
         const mTingkat = getTingkatSync(m);
-        return mTingkat === myTingkat || mTingkat === "SEMUA";
+        
+        if (mTingkat === "SEMUA" || mKelasMentah === "SEMUA" || mKelasMentah === "") return true;
+
+        let mKelasArray = mKelasMentah.split(',').map(k => k.trim());
+        
+        if (selKelasUpper && mKelasArray.includes(selKelasUpper)) return true;
+        if (mKelasArray.includes(myTingkat)) return true;
+
+        return false;
       });
 
       if (students.length === 0 || materials.length === 0) return null;

@@ -153,7 +153,7 @@
   lucide.createIcons();
   const userDataForAPI = JSON.parse(localStorage.getItem('user') || '{}');
   const myTingkatAPI = (userDataForAPI.tingkat || userDataForAPI.Tingkat || "X").toString().trim().toUpperCase();
-  const API_URL = `https://script.google.com/macros/s/AKfycbx8dBNFIqvVixZ5ORodulJYxqjtMvjr-Qajjez1uD7UIeq-ypSI1xaNjdUtJkq3ovzsbw/exec?sheet=materi`;
+  const API_URL = `https://script.google.com/macros/s/AKfycbz8Q_B9ky4B_rEctis6YtBwqsbgzJyrt7-lsHg-TnuQTcxsaGB8Y8-9s3CFTXtS3LSs/exec?sheet=materi`;
 
   if (!localStorage.getItem("user")) {
     window.location.href = "index.html";

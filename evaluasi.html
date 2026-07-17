@@ -125,7 +125,7 @@
     <script>
         const userDataForAPI = JSON.parse(localStorage.getItem('user') || '{}');
         const myTingkatAPI = (userDataForAPI.tingkat || userDataForAPI.Tingkat || "X").toString().trim().toUpperCase();
-        const API_EVALUASI = `https://script.google.com/macros/s/AKfycbx8dBNFIqvVixZ5ORodulJYxqjtMvjr-Qajjez1uD7UIeq-ypSI1xaNjdUtJkq3ovzsbw/exec?sheet=soal`;
+        const API_EVALUASI = `https://script.google.com/macros/s/AKfycbz8Q_B9ky4B_rEctis6YtBwqsbgzJyrt7-lsHg-TnuQTcxsaGB8Y8-9s3CFTXtS3LSs/exec?sheet=soal`;
         const urlParams = new URLSearchParams(window.location.search);
         const idMateri = urlParams.get('id');
         const tipe = urlParams.get('tipe') || "Kuis";
@@ -138,7 +138,7 @@
         let userAnswers = [];
         let timerInterval;
         let elapsedSeconds = 0;
-        const API_BASE = "https://script.google.com/macros/s/AKfycbx8dBNFIqvVixZ5ORodulJYxqjtMvjr-Qajjez1uD7UIeq-ypSI1xaNjdUtJkq3ovzsbw/exec";
+        const API_BASE = "https://script.google.com/macros/s/AKfycbz8Q_B9ky4B_rEctis6YtBwqsbgzJyrt7-lsHg-TnuQTcxsaGB8Y8-9s3CFTXtS3LSs/exec";
 
         window.onload = () => {
             lucide.createIcons();

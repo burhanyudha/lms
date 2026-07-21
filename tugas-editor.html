@@ -404,6 +404,7 @@
         // Validasi Sesi
         const userData = JSON.parse(localStorage.getItem('user') || '{}');
         userData.username = userData.username || userData.nisn || userData.nis || userData.nama;
+        if (userData.username) { localStorage.setItem('user', JSON.stringify(userData)); }
         if (!userData.username) {
             alert("Sesi Anda telah berakhir. Silakan login kembali.");
             window.location.href = "index.html";

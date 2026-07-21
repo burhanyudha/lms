@@ -480,7 +480,7 @@
 
         function startTimer() {
             const userData = JSON.parse(localStorage.getItem('user') || '{}');
-            const username = userData.username;
+            const username = userData.username || userData.nisn || userData.nis || userData.nama;
 
             // Update UI setiap detik
             timerInterval = setInterval(() => {
@@ -528,7 +528,7 @@
             const waktuFormat = `${m}:${s}`;
 
             const userData = JSON.parse(localStorage.getItem('user') || '{}');
-            const username = userData.username || "Anonim";
+            const username = userData.username || userData.nisn || userData.nis || userData.nama || "Anonim";
             const nama = userData.nama || "Anonim";
 
             let mappedAnswers = [];

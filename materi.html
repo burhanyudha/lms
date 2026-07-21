@@ -266,6 +266,13 @@
         }
         embed = `<iframe src="${embedUrl}" allowfullscreen></iframe>`;
       }
+      else if (link.includes("docs.google.com/document")) {
+        let match = link.match(/[-\w]{25,}/);
+        if (match) {
+            let fileId = match[0];
+            embed = `<iframe src="https://docs.google.com/document/d/${fileId}/preview" allowfullscreen></iframe>`;
+        }
+      }
       else if (link.includes("drive.google.com")) {
         let match = link.match(/[-\w]{25,}/);
         if (match) {

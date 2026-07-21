@@ -1079,9 +1079,11 @@
           let isMateriLocked = false;
 
           if (!isMateriLocked) {
-            if (localStorage.getItem(`opened_materi_${user.username}_${mid}`)) openedMaterials.add(mid.toString());
+            const uName = user.username || user.nisn || user.nis || user.nama || "-";
+            if (localStorage.getItem(`opened_materi_${uName}_${mid}`)) openedMaterials.add(mid.toString());
           } else {
-            localStorage.removeItem(`opened_materi_${user.username}_${mid}`);
+            const uName = user.username || user.nisn || user.nis || user.nama || "-";
+            localStorage.removeItem(`opened_materi_${uName}_${mid}`);
           }
         });
 

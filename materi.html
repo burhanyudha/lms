@@ -325,7 +325,7 @@
 
   function logMateriProgress(idMateri) {
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
-    const username = userData.username;
+    const username = userData.username || userData.nisn || userData.nis || userData.nama || "-";
     
     if (username) {
       localStorage.setItem(`opened_materi_${username}_${idMateri}`, "true");

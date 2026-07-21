@@ -719,6 +719,7 @@
                 );
 
                 if (user) {
+                    user.username = user.username || user.nisn || user.nis || user.nama || "-";
                     // Standarisasi properti tingkat
                     user.tingkat = user.tingkat || user.Tingkat || "";
                     if (!user.tingkat || (user.tingkat === "X" && user.kelas && (user.kelas.toUpperCase().startsWith("XI") || user.kelas.toUpperCase().startsWith("XII")))) {

@@ -28,7 +28,12 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    
     body {
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
       margin: 0;
       font-family: 'Inter', sans-serif;
       background-color: var(--bg-color);
@@ -338,6 +343,26 @@
       localStorage.setItem(`opened_materi_${username}_${idMateri}`, "true");
     }
   }
+
+  
+  // Block right click context menu
+  document.addEventListener("contextmenu", e => e.preventDefault());
+
+  // Block copy, cut, paste, and selection
+  document.addEventListener("copy", e => e.preventDefault());
+  document.addEventListener("cut", e => e.preventDefault());
+  document.addEventListener("selectstart", e => e.preventDefault());
+
+  // Block shortcuts: Ctrl+C, Ctrl+S, Ctrl+U, Ctrl+P, and Cmd counterparts
+  document.addEventListener("keydown", e => {
+    if (
+      (e.ctrlKey && ["c", "s", "u", "p"].includes(e.key.toLowerCase())) ||
+      (e.metaKey && ["c", "s", "u", "p"].includes(e.key.toLowerCase()))
+    ) {
+      e.preventDefault();
+      alert("Penyalinan materi tidak diizinkan.");
+    }
+  });
 
   loadMateri();
 </script>

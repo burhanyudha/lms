@@ -29,6 +29,23 @@
     }
 
     
+    
+    .viewer-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    .iframe-shield {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      background: transparent;
+    }
+
     body {
       -webkit-user-select: none;
       -moz-user-select: none;
@@ -323,7 +340,27 @@
           }
         };
         
-        container.appendChild(iframe);
+        
+        const wrapper = document.createElement("div");
+        wrapper.className = "viewer-container";
+        
+        const shield = document.createElement("div");
+        shield.className = "iframe-shield";
+        
+        // Block mousedown to prevent text selection and focus inside iframe
+        shield.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+        });
+        
+        // Block right click on the shield
+        shield.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+        });
+
+        wrapper.appendChild(iframe);
+        wrapper.appendChild(shield);
+        container.appendChild(wrapper);
+
 
       } else {
         container.innerHTML = `<div class="loader-container"><a href="${link}" target="_blank" style="display:inline-block; padding:10px 20px; background:var(--primary); color:white; border-radius:8px; text-decoration:none; font-weight:600;">Buka Materi di Tab Baru</a></div>`;

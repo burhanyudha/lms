@@ -156,7 +156,7 @@
 
         async function initializeSession() {
             const userData = JSON.parse(localStorage.getItem('user') || '{}');
-            const username = userData.username;
+            const username = userData.username || userData.nisn || userData.nis || userData.nama;
             if(!username) {
                 alert("Sesi tidak valid, harap login kembali");
                 window.location.href = "index.html";

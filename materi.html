@@ -30,21 +30,7 @@
 
     
     
-    .viewer-container {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-    }
-    .iframe-shield {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 2;
-      background: transparent;
-    }
+    
 
     body {
       -webkit-user-select: none;
@@ -295,7 +281,7 @@
         let match = link.match(/[-\w]{25,}/);
         if (match) {
             let fileId = match[0];
-            embed = `<iframe src="https://docs.google.com/document/d/${fileId}/preview" allowfullscreen></iframe>`;
+            embed = `<iframe src="https://drive.google.com/file/d/${fileId}/preview" allowfullscreen></iframe>`;
         }
       }
       else if (link.includes("drive.google.com")) {
@@ -341,25 +327,7 @@
         };
         
         
-        const wrapper = document.createElement("div");
-        wrapper.className = "viewer-container";
-        
-        const shield = document.createElement("div");
-        shield.className = "iframe-shield";
-        
-        // Block mousedown to prevent text selection and focus inside iframe
-        shield.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-        });
-        
-        // Block right click on the shield
-        shield.addEventListener("contextmenu", (e) => {
-            e.preventDefault();
-        });
-
-        wrapper.appendChild(iframe);
-        wrapper.appendChild(shield);
-        container.appendChild(wrapper);
+        container.appendChild(iframe);
 
 
       } else {

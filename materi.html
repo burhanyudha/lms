@@ -321,7 +321,7 @@
     }
   }
 
-  function back() { window.location.href = "dashboard.html"; }
+  function back() { if (document.referrer && document.referrer.includes(window.location.hostname)) { history.back(); } else { window.location.href = "dashboard.html"; } }
 
   function logMateriProgress(idMateri) {
     const userData = JSON.parse(localStorage.getItem('user') || '{}');

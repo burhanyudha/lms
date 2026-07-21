@@ -293,7 +293,8 @@
         let match = link.match(/[-\w]{25,}/);
         if (match) {
             let fileId = match[0];
-            embed = `<iframe src="https://docs.google.com/document/d/${fileId}/preview" allowfullscreen></iframe>`;
+            let dlUrl = `https://docs.google.com/document/d/${fileId}/export?format=pdf`;
+            embed = `<iframe src="https://docs.google.com/gview?url=${encodeURIComponent(dlUrl)}&embedded=true" allowfullscreen></iframe>`;
         }
       }
       else if (link.includes("drive.google.com")) {

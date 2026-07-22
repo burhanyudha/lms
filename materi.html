@@ -288,8 +288,7 @@
         let match = link.match(/[-\w]{25,}/);
         if (match) {
             let fileId = match[0];
-            // Force use docs.google.com preview format to bypass mobile third-party cookie/SAMEORIGIN restrictions
-            embed = `<iframe src="https://docs.google.com/document/d/${fileId}/preview" allowfullscreen></iframe>`;
+            embed = `<iframe src="https://drive.google.com/file/d/${fileId}/preview" allowfullscreen></iframe>`;
         }
       } 
       else if (link.toLowerCase().includes(".pdf")) {

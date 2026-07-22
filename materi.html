@@ -294,6 +294,9 @@
       else if (link.toLowerCase().includes(".pdf")) {
         embed = `<iframe src="${link}#view=FitH&toolbar=0"></iframe>`;
       }
+      else if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(link)) {
+        embed = `<div style="width:100%; height:100%; overflow:auto; display:flex; justify-content:center; align-items:center; background:white;"><img src="${link}" style="max-width:100%; max-height:100%; object-fit:contain;" unselectable="on" ondragstart="return false;" /></div>`;
+      }
 
       if (embed) {
         container.innerHTML = `

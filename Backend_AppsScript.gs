@@ -90,7 +90,7 @@ function doGet(e) {
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(30000); // Tunggu antrean hingga 30 detik
+    lock.waitLock(60000); // Tunggu antrean hingga 60 detik (maksimal)
   } catch (e) {
     return ContentService.createTextOutput(JSON.stringify({status: "error", message: "Server sibuk, silakan coba sesaat lagi"}))
                          .setMimeType(ContentService.MimeType.JSON);

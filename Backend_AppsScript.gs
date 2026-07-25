@@ -88,6 +88,14 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000); // Tunggu antrean hingga 30 detik
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({status: "error", message: "Server sibuk, silakan coba sesaat lagi"}))
+                         .setMimeType(ContentService.MimeType.JSON);
+  }
+  
   try {
     var postData = JSON.parse(e.postData.contents);
     var action = postData.action;
@@ -905,6 +913,9 @@ function doPost(e) {
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({status: "error", message: error.message || error.toString()}))
                          .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    SpreadsheetApp.flush(); // Commit data ke sheet secara instan
+    lock.releaseLock(); // Lepaskan lock agar antrean berikutnya bisa masuk
   }
 }
 

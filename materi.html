@@ -215,9 +215,20 @@
     const titleEl = document.getElementById("displayJudul");
     const container = document.getElementById("materiList");
 
+    let data;
     try {
       const res = await fetch(API_URL);
-      const data = await res.json();
+      data = await res.json();
+    } catch (fetchErr) {
+      console.warn("Gagal fetch live materi, menggunakan cache lokal:", fetchErr);
+      const cached = localStorage.getItem("cache_materi");
+      if (cached) {
+         data = JSON.parse(cached);
+      } else {
+         throw fetchErr; // Jika tidak ada cache sama sekali, lempar error asli
+      }
+    }
+    try {
       const getVal = (obj, possibleKeys) => {
           for (const key in obj) {
               const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -231,8 +242,8 @@
       const midTarget = getParam("id");
 
       let m = data.find(item => {
-          let mid = (getVal(item, ['id_materi', 'idmateri', 'id']) || item.rowNumber).toString().trim();
-          return mid === midTarget;
+          let mid = (getVal(item, ['id_materi', 'idmateri', 'id']) || item.rowNumber).toString().trim().toLowerCase();
+          return mid === (midTarget || "").toString().trim().toLowerCase();
       });
 
       if (!midTarget || !m) {

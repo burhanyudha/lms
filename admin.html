@@ -2070,13 +2070,10 @@
           });
           
           selMateri.innerHTML = '<option value="">-- Pilih Materi --</option>';
-          let relativeId = 1;
           materiTingkatIni.forEach((m) => {
-             let tk = getVal(m, ['kelas', 'tingkat']);
-             let isSemua = !tk || tk.toString().trim() === "" || tk.toString().trim().toUpperCase() === "SEMUA";
-             let actualId = isSemua ? m.rowNumber : relativeId++;
              let judul = getVal(m, ['judul', 'materi', 'namamateri']) || "Tanpa Judul";
-             selMateri.innerHTML += `<option value="${actualId}">[ID Kuis: ${actualId}] ${judul}</option>`;
+             let mId = (getVal(m, ['id', 'id_materi', 'idmateri', 'materiid']) || "").toString().trim();
+             selMateri.innerHTML += `<option value="${mId}">[ID: ${mId}] ${judul}</option>`;
           });
           
           if (oldMateri) {
@@ -2143,10 +2140,9 @@
       let validMateriHTML = '<option value="">-- Pilih Materi --</option>';
       materiTingkatIni.forEach((m, i) => {
          let judul = getVal(m, ['judul', 'materi', 'namamateri']);
+         let mId = (getVal(m, ['id', 'id_materi', 'idmateri', 'materiid']) || "").toString().trim();
          if (judul && judul.toString().trim() !== "") {
-             // value di sini sekarang akan cocok 100% dengan id_materi yang tersimpan di listNilai
-             // karena mengikuti urutan index (i+1) khusus untuk kelas tersebut.
-             validMateriHTML += `<option value="${i+1}">${judul}</option>`;
+             validMateriHTML += `<option value="${mId}">${judul}</option>`;
          }
       });
       

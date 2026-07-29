@@ -2151,6 +2151,7 @@
     }
 
     function renderTableNilai() {
+      const norm = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "").trim();
       let selKelas = document.getElementById('filterKelasNilai').value;
       let selMateri = document.getElementById('filterMateriNilai').value;
       let tbody = document.getElementById('nilaiTableBody');

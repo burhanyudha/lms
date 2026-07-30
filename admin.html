@@ -571,6 +571,9 @@
               <label>Cari Nama atau Materi</label>
               <input type="text" id="searchTugas" class="form-control" placeholder="Ketik nama atau tugas..." onkeyup="renderTableTugas()">
             </div>
+            <div style="margin-bottom: 0;">
+              <button class="btn btn-primary" style="background:#8b5cf6; border-color:#8b5cf6;" onclick="bulkKoreksiAI()"><i data-lucide="cpu"></i> Bulk Koreksi AI</button>
+            </div>
           </div>
           <div class="table-responsive">
             <table>
@@ -862,6 +865,7 @@
     let dataUser = [];
     let dataLogLogin = [];
     let dataLogTugas = [];
+    let activeFilteredTugas = [];
     let dataSettings = [];
     let dataGuru = [];
     
@@ -1740,6 +1744,7 @@
         
         return matchSearch && matchKelas;
       });
+      activeFilteredTugas = filtered;
 
       filtered.forEach(t => {
          let w = getVal(t, ['waktu', 'timestamp', 'tanggal']);
@@ -1820,7 +1825,83 @@
         }
     };
 
-    window.koreksiTugasAI = async function(rowNumber) {
+        window.bulkKoreksiAI = async function() {
+      if (!activeFilteredTugas || activeFilteredTugas.length === 0) {
+         return alert("Tidak ada data tugas yang disaring untuk dikoreksi.");
+      }
+
+      // Filter yang belum diperiksa saja untuk menghemat kuota token AI
+      let targets = activeFilteredTugas.filter(t => getVal(t, ["status_periksa"]) !== "Sudah");
+      if (targets.length === 0) {
+         return alert("Semua tugas yang disaring sudah selesai diperiksa.");
+      }
+
+      if (!confirm("Yakin ingin mengoreksi " + targets.length + " tugas yang disaring menggunakan AI secara otomatis?")) {
+         return;
+      }
+
+      showOverlay("Memulai Bulk Koreksi AI...");
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < targets.length; i++) {
+         let t = targets[i];
+         let rowNumber = t.rowNumber;
+         let userNama = getVal(t, ["nama", "username"]) || "-";
+         showOverlay("Mengoreksi (" + (i + 1) + " / " + targets.length + "): " + userNama);
+
+         let tMid = (getVal(t, ["id_materi", "materi"]) || "").toString().trim();
+         let mObj = dataMateri.find(m => {
+            let mId = (getVal(m, ["id", "id_materi", "idmateri", "materiid"]) || "").toString().trim();
+            return mId.toLowerCase() === tMid.toLowerCase();
+         });
+
+         let materiText = "Menulis ulang materi";
+         if (mObj) {
+            materiText = (getVal(mObj, ["judul", "materi"]) || "") + "\n" + (getVal(mObj, ["deskripsi", "keterangan"]) || "");
+         }
+
+         let payload = {
+            action: "koreksiTugasAI",
+            username: getVal(t, ["username"]),
+            nama: getVal(t, ["nama"]),
+            kelas: getVal(t, ["kelas", "tingkat"]),
+            id_materi: tMid,
+            fileUrl: getVal(t, ["link_tugas", "file"]),
+            materiText: materiText
+         };
+
+         try {
+            let response = await fetch(API_URL, {
+               method: "POST",
+               headers: { "Content-Type": "text/plain;charset=utf-8" },
+               body: JSON.stringify(payload)
+            });
+            let result = await response.json();
+            if (result.status === "success") {
+               successCount++;
+               // Tandai sudah diperiksa secara otomatis setelah sukses dinilai
+               await fetch(API_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                  body: JSON.stringify({ action: 'markTugasRead', rowNumber: rowNumber, status: 'Sudah' })
+               });
+            } else {
+               failedCount++;
+            }
+         } catch (e) {
+            console.error(e);
+            failedCount++;
+         }
+      }
+
+      showOverlay("Selesai! Berhasil: " + successCount + ", Gagal: " + failedCount);
+      setTimeout(() => {
+         loadAllData();
+      }, 2000);
+    };
+
+window.koreksiTugasAI = async function(rowNumber) {
       if (!rowNumber) return;
       let t = dataLogTugas.find(item => item.rowNumber === rowNumber);
       if (!t) return alert("Data tugas tidak ditemukan");

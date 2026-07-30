@@ -1802,6 +1802,9 @@
             <button onclick="toggleTugasChecked(${t.rowNumber}, '${isRead ? 'Belum' : 'Sudah'}')" class="btn btn-outline" style="padding:6px 10px; font-size:0.75rem; margin-left:4px; border-color:${isRead ? '#22c55e' : ''}; color:${btnColor};" title="Tandai Sudah Diperiksa">
               <i data-lucide="${btnIcon}" style="width:14px; height:14px;"></i>
             </button>
+            <button onclick="koreksiTugasAI(${t.rowNumber})" class="btn btn-outline" style="padding:6px 10px; font-size:0.75rem; margin-left:4px; border-color:#8b5cf6; color:#8b5cf6;" title="Koreksi Otomatis dengan AI">
+              <i data-lucide="cpu" style="width:14px; height:14px;"></i> AI
+            </button>
           </td>
         </tr>`;
       });
@@ -1815,6 +1818,57 @@
         if (tugasLog && getVal(tugasLog, ['status_periksa']) !== "Sudah") {
             toggleTugasChecked(rowNumber, 'Sudah');
         }
+    };
+
+    window.koreksiTugasAI = async function(rowNumber) {
+      if (!rowNumber) return;
+      let t = dataLogTugas.find(item => item.rowNumber === rowNumber);
+      if (!t) return alert("Data tugas tidak ditemukan");
+
+      // Cari materi acuan pembanding berdasarkan id_materi
+      let tMid = (getVal(t, ["id_materi", "materi"]) || "").toString().trim();
+      let mObj = dataMateri.find(m => {
+         let mId = (getVal(m, ["id", "id_materi", "idmateri", "materiid"]) || "").toString().trim();
+         return mId.toLowerCase() === tMid.toLowerCase();
+      });
+
+      let materiText = "Menulis ulang materi";
+      if (mObj) {
+         materiText = (getVal(mObj, ["judul", "materi"]) || "") + "\n" + (getVal(mObj, ["deskripsi", "keterangan"]) || "");
+      }
+
+      let payload = {
+         action: "koreksiTugasAI",
+         username: getVal(t, ["username"]),
+         nama: getVal(t, ["nama"]),
+         kelas: getVal(t, ["kelas", "tingkat"]),
+         id_materi: tMid,
+         fileUrl: getVal(t, ["link_tugas", "file"]),
+         materiText: materiText
+      };
+
+      showOverlay("AI Sedang Mengoreksi Tugas...");
+      try {
+         let response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+         });
+         let result = await response.json();
+         if (result.status === "success") {
+            showOverlay(result.message || "Koreksi AI Sukses!");
+            setTimeout(() => {
+               loadAllData();
+            }, 1500);
+         } else {
+            alert("Gagal Koreksi: " + (result.message || "Terjadi kesalahan di server."));
+            hideOverlay();
+         }
+      } catch (e) {
+         console.error(e);
+         alert("Error: Gagal terhubung ke server untuk asisten AI.");
+         hideOverlay();
+      }
     };
 
     window.toggleTugasChecked = async function(rowNumber, newStatus) {

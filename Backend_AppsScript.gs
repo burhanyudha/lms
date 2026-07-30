@@ -715,6 +715,108 @@ function doPost(e) {
     // ===============================================
     // ACTION 7: MARK TUGAS READ (ADMIN PANEL)
     // ===============================================
+    if (action === "koreksiTugasAI") {
+      var username = postData.username;
+      var idMateri = postData.id_materi;
+      var nama = postData.nama;
+      var kelas = postData.kelas;
+      var fileUrl = postData.fileUrl;
+      var materiText = postData.materiText;
+      
+      // Ambil API Key dari settings
+      var settingsSheet = ss.getSheetByName("settings");
+      var apiKey = "";
+      if (settingsSheet) {
+         var setObj = settingsSheet.getDataRange().getValues();
+         for(var s=1; s<setObj.length; s++){
+            if(setObj[s][0] === "GEMINI_API_KEY") { apiKey = setObj[s][1]; break; }
+         }
+      }
+      if (!apiKey) throw new Error("API Key Gemini belum diatur di sheet settings.");
+
+      // Ambil teks dari file di Drive
+      var fileId = fileUrl.match(/[-\w]{25,}/)[0];
+      var file = DriveApp.getFileById(fileId);
+      var docText = "";
+      
+      if (file.getMimeType() === MimeType.PDF) {
+         var tempDoc = Drive.Files.create({ title: "TempOCR", mimeType: MimeType.GOOGLE_DOCS }, file.getBlob());
+         var doc = DocumentApp.openById(tempDoc.id);
+         docText = doc.getBody().getText();
+         Drive.Files.remove(tempDoc.id);
+      } else {
+         docText = file.getBlob().getDataAsString();
+      }
+
+      // Prompt penilaian
+      var prompt = "Koreksi tugas menulis ulang materi.\n\nMateri acuan:\n" + materiText + "\n\nPekerjaan siswa:\n" + docText + "\n\nBerikan JSON murni tanpa markdown (kriteria: kelengkapan, keakuratan, kerapihan, saran [umpan balik singkat]). Skor 1-100. Contoh output: {\"kelengkapan\": 90, \"keakuratan\": 85, \"kerapihan\": 80, \"saran\": \"Bagus!\"}";
+
+      var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+      var response = UrlFetchApp.fetch(apiUrl, {
+         "method": "POST",
+         "contentType": "application/json",
+         "payload": JSON.stringify({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json"}
+         }),
+         "muteHttpExceptions": true
+      });
+
+      var resJson = JSON.parse(response.getContentText());
+      var aiText = resJson.candidates[0].content.parts[0].text;
+      var evaluation = JSON.parse(aiText.trim());
+      var rataRata = Math.round((evaluation.kelengkapan + evaluation.keakuratan + evaluation.kerapihan) / 3);
+
+      // Simpan ke listNilai
+      var sheetNilai = ss.getSheetByName("listNilai");
+      if (!sheetNilai) {
+         sheetNilai = ss.insertSheet("listNilai");
+         sheetNilai.appendRow(["username", "nama", "kelas", "id_materi", "nilai", "tipe", "waktu", "kelengkapan", "keakuratan", "kerapihan", "saran"]);
+      }
+
+      var headers = sheetNilai.getDataRange().getValues()[0];
+      var normHeaders = headers.map(function(h) { return h.toString().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+      
+      var rowUserCol = normHeaders.indexOf("username");
+      var rowMateriCol = normHeaders.indexOf("idmateri");
+      if(rowMateriCol === -1) rowMateriCol = normHeaders.indexOf("idmateri");
+      
+      var updated = false;
+      var sheetData = sheetNilai.getDataRange().getValues();
+      
+      // Update jika data nilai tugas ini sudah ada
+      for(var j = sheetData.length - 1; j > 0; j--) {
+         if (sheetData[j][rowUserCol].toString().trim() === username && sheetData[j][rowMateriCol].toString().trim() === idMateri) {
+            sheetNilai.getRange(j + 1, normHeaders.indexOf("nilai") + 1).setValue(rataRata);
+            sheetNilai.getRange(j + 1, normHeaders.indexOf("kelengkapan") + 1).setValue(evaluation.kelengkapan);
+            sheetNilai.getRange(j + 1, normHeaders.indexOf("keakuratan") + 1).setValue(evaluation.keakuratan);
+            sheetNilai.getRange(j + 1, normHeaders.indexOf("kerapihan") + 1).setValue(evaluation.kerapihan);
+            sheetNilai.getRange(j + 1, normHeaders.indexOf("saran") + 1).setValue(evaluation.saran);
+            updated = true;
+            break;
+         }
+      }
+      
+      if (!updated) {
+         var newRow = new Array(headers.length).fill("");
+         newRow[normHeaders.indexOf("username")] = username;
+         newRow[normHeaders.indexOf("nama")] = nama;
+         newRow[normHeaders.indexOf("kelas")] = kelas;
+         newRow[normHeaders.indexOf("idmateri")] = idMateri;
+         newRow[normHeaders.indexOf("nilai")] = rataRata;
+         newRow[normHeaders.indexOf("tipe")] = "Tugas";
+         newRow[normHeaders.indexOf("waktu")] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+         newRow[normHeaders.indexOf("kelengkapan")] = evaluation.kelengkapan;
+         newRow[normHeaders.indexOf("keakuratan")] = evaluation.keakuratan;
+         newRow[normHeaders.indexOf("kerapihan")] = evaluation.kerapihan;
+         newRow[normHeaders.indexOf("saran")] = evaluation.saran;
+         sheetNilai.appendRow(newRow);
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Berhasil mengoreksi dengan AI. Rata-rata: " + rataRata }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "markTugasRead") {
       var sheetTugas = ss.getSheetByName("logTugas");
       if (!sheetTugas) throw new Error("Sheet logTugas tidak ditemukan");

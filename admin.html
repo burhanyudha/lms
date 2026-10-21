@@ -822,7 +822,7 @@
 
     const adminSession = localStorage.getItem("admin_user");
     const adminData = JSON.parse(adminSession || "{}");
-    const IS_SUPER_ADMIN = ["admin", "administrator", "superadmin"].includes((adminData.role || "").toString().toLowerCase().replace(/[^a-z0-9]/g, ""));
+    IS_SUPER_ADMIN = ["admin", "administrator", "superadmin"].includes((adminData.role || "").toString().toLowerCase().replace(/[^a-z0-9]/g, ""));
     if (!adminSession) {
         window.location.href = "login-admin.html";
     } else {

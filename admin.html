@@ -116,6 +116,20 @@
     .form-control { width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 0.9rem; outline: none; transition: border-color 0.2s; }
     .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
     .input-nilai { width: 80px; text-align: center; padding: 8px; }
+    .attendance-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:16px 0; }
+    .attendance-stat { background:#fff; border:1px solid var(--border-color); border-radius:10px; padding:12px 14px; box-shadow:var(--shadow-sm); }
+    .attendance-stat span { display:block; color:var(--text-muted); font-size:.7rem; font-weight:700; letter-spacing:.04em; }
+    .attendance-stat strong { display:block; margin-top:5px; font-size:1.5rem; }
+    .attendance-student { padding:14px 16px; border-bottom:1px solid #f1f5f9; }
+    .attendance-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; border-radius:9px; background:#f1f5f9; padding:4px; }
+    .attendance-choice { min-height:38px; border:0; border-radius:6px; background:transparent; color:#64748b; font-family:inherit; font-size:.78rem; font-weight:600; cursor:pointer; }
+    .attendance-choice.selected { background:#fff; color:#0f172a; box-shadow:0 1px 3px #0f172a22; }
+    .attendance-choice[data-status="Hadir"].selected { color:#15803d; }
+    .attendance-choice[data-status="Sakit"].selected { color:#1d4ed8; }
+    .attendance-choice[data-status="Izin"].selected { color:#b45309; }
+    .attendance-choice[data-status="Alpa"].selected { color:#b91c1c; }
+    .attendance-savebar { position:sticky; bottom:var(--nav-height); z-index:20; display:flex; justify-content:space-between; align-items:center; gap:12px; margin:0 -1px; padding:12px 16px; background:#ffffffed; border-top:1px solid var(--border-color); backdrop-filter:blur(8px); }
+    @media (max-width:520px) { .attendance-summary { gap:6px; } .attendance-stat { padding:9px; } .attendance-stat strong { font-size:1.25rem; } .attendance-choice { font-size:.68rem; } .attendance-savebar { align-items:stretch; flex-direction:column; bottom:var(--nav-height); } .attendance-savebar .btn { width:100%; } }
     .filter-bar { display: flex; gap: 12px; padding: 16px 20px; background: white; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
 
     /* MODAL */
@@ -683,12 +697,14 @@
 
       <section id="absenSection" style="display:none">
         <div class="header-section"><div><h1>Absensi Harian</h1><p style="color:var(--text-muted)">Catat kehadiran per kelas, tanggal, dan mata pelajaran.</p></div></div>
-        <div class="card"><div class="filter-bar">
+        <div class="attendance-summary" id="attendanceSummary"></div>
+        <div class="card" style="overflow:hidden"><div class="filter-bar" style="align-items:flex-end">
           <select class="form-control" id="filterKelasAbsen" onchange="renderAbsensiHarian()"><option value="">Pilih kelas</option></select>
           <select class="form-control" id="filterMapelAbsen" onchange="renderAbsensiHarian()"><option value="">Pilih mata pelajaran</option></select>
           <input class="form-control" id="filterTanggalAbsen" type="date" onchange="renderAbsensiHarian()">
-        </div><div class="table-responsive"><table><thead><tr><th>Nama siswa</th><th>Status</th><th>Keterangan</th></tr></thead><tbody id="absensiTableBody"><tr><td colspan="3">Pilih kelas dan mata pelajaran.</td></tr></tbody></table></div>
-          <div style="padding:16px 20px;display:grid;gap:12px"><label>Topik jurnal pelajaran<input class="form-control" id="absensiTopik" maxlength="200"></label><label>Catatan<input class="form-control" id="absensiCatatan" maxlength="1000"></label><button class="btn btn-primary" onclick="simpanAbsensi()">Simpan absensi & jurnal</button></div>
+        </div><div id="absensiTableBody"><div style="padding:24px;text-align:center;color:var(--text-muted)">Pilih kelas dan mata pelajaran.</div></div>
+          <div style="padding:16px 20px;display:grid;gap:12px;border-top:1px solid var(--border-color)"><label>Topik jurnal pelajaran<input class="form-control" id="absensiTopik" maxlength="200"></label><label>Catatan<input class="form-control" id="absensiCatatan" maxlength="1000"></label></div>
+          <div class="attendance-savebar"><span style="font-size:.8rem;color:var(--text-muted)">Tidak hadir: <b id="attendanceNotPresent">0</b></span><button class="btn btn-primary" onclick="simpanAbsensi()">Simpan absensi & jurnal</button></div>
         </div>
       </section>
       <section id="rekapAbsenSection" style="display:none">
@@ -2686,19 +2702,25 @@ window.koreksiTugasAI = async function(rowNumber) {
     }
     function escapeAttendanceHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     const ABSEN_STATUSES=['Hadir','Sakit','Izin','Alpa','Telat','Bolos','Tidak Memakai Wearpack'];
+    const ABSEN_PRIMARY=['Hadir','Sakit','Izin','Alpa'];
     function attendanceKey(row) { return ['tanggal','kelas','mapel'].map(k=>(getVal(row,[k])||'').toString().trim().toLowerCase()).join('|'); }
     function renderAbsensiHarian() {
       const kelas=document.getElementById('filterKelasAbsen').value, mapel=document.getElementById('filterMapelAbsen').value, tanggal=document.getElementById('filterTanggalAbsen').value;
-      const body=document.getElementById('absensiTableBody'); if(!kelas||!mapel||!tanggal){body.innerHTML='<tr><td colspan="3">Pilih kelas, mata pelajaran, dan tanggal.</td></tr>';return;}
+      const body=document.getElementById('absensiTableBody'); if(!kelas||!mapel||!tanggal){body.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-muted)">Pilih kelas, mata pelajaran, dan tanggal.</div>';document.getElementById('attendanceSummary').innerHTML='';document.getElementById('attendanceNotPresent').textContent='0';return;}
       const students=dataUser.filter(u=>(getVal(u,['kelas','tingkat'])||'').toString().trim().toLowerCase()===kelas.toLowerCase()).sort((a,b)=>(getVal(a,['nama'])||'').localeCompare(getVal(b,['nama'])||''));
       const existing=new Map(dataAbsen.filter(r=>attendanceKey(r)===[tanggal,kelas,mapel].map(v=>v.toLowerCase()).join('|')).map(r=>[(getVal(r,['username'])||'').toString().trim().toLowerCase(),r]));
-      body.innerHTML=students.length?students.map(s=>{const user=getVal(s,['username','nisn','nis'])||'', saved=existing.get(String(user).toLowerCase()), status=getVal(saved||{},['status'])||'', note=getVal(saved||{},['keterangan'])||'';return `<tr data-user="${escapeAttendanceHtml(user)}"><td>${escapeAttendanceHtml(getVal(s,['nama'])||user)}</td><td><select class="form-control abs-status" aria-label="Status ${escapeAttendanceHtml(getVal(s,['nama'])||user)}"><option value="">Pilih status</option>${ABSEN_STATUSES.map(v=>`<option ${v===status?'selected':''}>${escapeAttendanceHtml(v)}</option>`).join('')}</select></td><td><input class="form-control abs-note" maxlength="300" value="${escapeAttendanceHtml(note)}" aria-label="Keterangan ${escapeAttendanceHtml(getVal(s,['nama'])||user)}"></td></tr>`}).join(''):'<tr><td colspan="3">Tidak ada siswa di kelas ini.</td></tr>';
+      const counts=Object.fromEntries(ABSEN_STATUSES.map(s=>[s,students.filter(student=>getVal(existing.get(String(getVal(student,['username','nisn','nis'])||'').toLowerCase())||{},['status'])===s).length]));
+      document.getElementById('attendanceSummary').innerHTML=ABSEN_PRIMARY.map(s=>`<div class="attendance-stat"><span>${s.toUpperCase()}</span><strong style="color:${s==='Hadir'?'#16a34a':s==='Sakit'?'#2563eb':s==='Izin'?'#d97706':'#dc2626'}">${counts[s]}</strong></div>`).join('');
+      document.getElementById('attendanceNotPresent').textContent=counts.Sakit+counts.Izin+counts.Alpa;
+      body.innerHTML=students.length?students.map((s,index)=>{const user=getVal(s,['username','nisn','nis'])||'', saved=existing.get(String(user).toLowerCase()), status=getVal(saved||{},['status'])||'', note=getVal(saved||{},['keterangan'])||'', name=getVal(s,['nama'])||user;return `<div class="attendance-student" data-user="${escapeAttendanceHtml(user)}" data-status="${escapeAttendanceHtml(status)}"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="width:22px;color:#94a3b8;font:12px monospace">${index+1}.</span><strong style="font-size:.9rem">${escapeAttendanceHtml(name)}</strong><span class="attendance-current" style="margin-left:auto;font-size:.7rem;color:#64748b">${escapeAttendanceHtml(status||'Belum diisi')}</span></div><div class="attendance-options">${ABSEN_PRIMARY.map(v=>`<button type="button" class="attendance-choice ${v===status?'selected':''}" data-status="${v}" aria-pressed="${v===status}" onclick="pilihStatusAbsensi(this,'${escapeAttendanceHtml(v)}')">${v}</button>`).join('')}</div><details style="margin:8px 0 0 30px"><summary style="font-size:.75rem;color:#64748b;cursor:pointer">Status lain / keterangan</summary><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><select class="form-control abs-extra-status" aria-label="Status lain ${escapeAttendanceHtml(name)}" onchange="pilihStatusTambahan(this)" style="max-width:220px"><option value="">Pilih status lain</option>${ABSEN_STATUSES.slice(4).map(v=>`<option ${v===status?'selected':''}>${escapeAttendanceHtml(v)}</option>`).join('')}</select><input class="form-control abs-note" maxlength="300" value="${escapeAttendanceHtml(note)}" placeholder="Keterangan (opsional)" aria-label="Keterangan ${escapeAttendanceHtml(name)}" style="flex:1;min-width:160px"></div></details></div>`}).join(''):'<div style="padding:24px;text-align:center;color:var(--text-muted)">Tidak ada siswa di kelas ini.</div>';
       const journal=dataJurnal.find(r=>attendanceKey(r)===[tanggal,kelas,mapel].map(v=>v.toLowerCase()).join('|')); document.getElementById('absensiTopik').value=getVal(journal||{},['topik'])||''; document.getElementById('absensiCatatan').value=getVal(journal||{},['catatan'])||'';
     }
+    function pilihStatusAbsensi(button,status) { const row=button.closest('[data-user]'); row.dataset.status=status; row.querySelectorAll('.attendance-choice').forEach(el=>{const active=el.dataset.status===status;el.classList.toggle('selected',active);el.setAttribute('aria-pressed',active);}); row.querySelector('.abs-extra-status').value=''; row.querySelector('.attendance-current').textContent=status; }
+    function pilihStatusTambahan(select) { if(!select.value)return;const row=select.closest('[data-user]');row.dataset.status=select.value;row.querySelectorAll('.attendance-choice').forEach(el=>{el.classList.remove('selected');el.setAttribute('aria-pressed','false');});row.querySelector('.attendance-current').textContent=select.value; }
     async function simpanAbsensi() {
       const tanggal=document.getElementById('filterTanggalAbsen').value, kelas=document.getElementById('filterKelasAbsen').value, mapel=document.getElementById('filterMapelAbsen').value;
-      const rows=[...document.querySelectorAll('#absensiTableBody tr[data-user]')]; if(!tanggal||!kelas||!mapel||!rows.length){alert('Pilih kelas, mapel, dan tanggal terlebih dahulu.');return;}
-      const absensi=rows.map(row=>({username:row.dataset.user,status:row.querySelector('.abs-status').value,keterangan:row.querySelector('.abs-note').value}));
+      const rows=[...document.querySelectorAll('#absensiTableBody [data-user]')]; if(!tanggal||!kelas||!mapel||!rows.length){alert('Pilih kelas, mapel, dan tanggal terlebih dahulu.');return;}
+      const absensi=rows.map(row=>({username:row.dataset.user,status:row.dataset.status||'',keterangan:row.querySelector('.abs-note').value}));
       const missing=absensi.find(item=>!ABSEN_STATUSES.includes(item.status)); if(missing){alert('Pilih status untuk semua siswa sebelum menyimpan.');return;}
       showOverlay('Menyimpan absensi...');
       try { const response=await lmsApi.call('saveAttendanceBulk',{data:{tanggal,kelas,mapel,absensi,jurnal:{topik:document.getElementById('absensiTopik').value,catatan:document.getElementById('absensiCatatan').value}}}); const result=await response.json(); if(result.status!=='success')throw new Error(result.message||'Gagal menyimpan.'); await loadAllData(); alert(`Absensi tersimpan untuk ${result.saved} siswa.`); }

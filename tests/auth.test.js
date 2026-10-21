@@ -36,6 +36,8 @@ const rowsBySheet = {
   logLogin: [['username', 'nama', 'kelas', 'waktu', 'status']],
   settings: [['key', 'value'], ['MAX_UPLOAD_SIZE', 5]]
 };
+rowsBySheet.absen = [['tanggal','kelas','mapel','guru','username','nama','status','keterangan','updated_at']];
+rowsBySheet.jurnal = [['tanggal','kelas','mapel','guru','topik','catatan','updated_at']];
 
 function makeSheet(name) {
   const rows = rowsBySheet[name];
@@ -48,6 +50,10 @@ function makeSheet(name) {
       getDisplayValues: () => rows.map(row => row.map(String))
     }),
     appendRow: row => rows.push(row)
+    ,getRange: (startRow, startCol, numRows = 1, numCols = 1) => ({
+      setValue(value) { while (rows.length < startRow) rows.push([]); rows[startRow - 1][startCol - 1] = value; },
+      setValues(values) { values.forEach((valuesRow, i) => { while (rows.length < startRow + i) rows.push([]); for(let j=0;j<numCols;j++) rows[startRow+i-1][startCol+j-1]=valuesRow[j]; }); }
+    })
   };
 }
 
@@ -144,6 +150,24 @@ assert.equal(post({
   id_materi: 'MAT-XI',
   token: teacherLogin.token
 }).code, 'FORBIDDEN');
+const attendancePayload = {tanggal:'2026-10-21',kelas:'X TKR 1',mapel:'Informatika',absensi:[{username:'student-x',status:'Hadir',keterangan:''}],jurnal:{topik:'Pengantar',catatan:'Pembelajaran lancar'}};
+assert.equal(post({action:'saveAttendanceBulk',data:attendancePayload,token:login.token}).code,'FORBIDDEN');
+assert.equal(post({action:'saveAttendanceBulk',data:{...attendancePayload,mapel:'Fisika'},token:teacherLogin.token}).code,'FORBIDDEN');
+assert.equal(post({action:'saveAttendanceBulk',data:{...attendancePayload,absensi:[{username:'student-y',status:'Hadir'}]},token:teacherLogin.token}).code,'FORBIDDEN');
+assert.equal(post({action:'saveAttendanceBulk',data:{...attendancePayload,absensi:[{username:'student-x',status:'Hadiran'}]},token:teacherLogin.token}).code,'FORBIDDEN');
+const savedAttendance=post({action:'saveAttendanceBulk',data:attendancePayload,token:teacherLogin.token});
+assert.deepEqual(savedAttendance,{status:'success',saved:1});
+assert.equal(rowsBySheet.absen.length,2);
+assert.equal(rowsBySheet.absen[1][6],'Hadir');
+assert.equal(rowsBySheet.jurnal.length,2);
+const revisedAttendance={...attendancePayload,absensi:[{username:'student-x',status:'Telat',keterangan:'Datang terlambat'}]};
+assert.equal(post({action:'saveAttendanceBulk',data:revisedAttendance,token:teacherLogin.token}).status,'success');
+assert.equal(rowsBySheet.absen.length,2);
+assert.equal(rowsBySheet.absen[1][6],'Telat');
+const otherTeacher = {...teacher, username:'teacher-y', nama:'Teacher Y'};
+assert.equal(context.saveAttendanceBulk_(context.SpreadsheetApp.getActiveSpreadsheet(),otherTeacher,revisedAttendance).status,'success');
+assert.equal(rowsBySheet.absen.length,3);
+assert.equal(context.getSafeSheetData_(context.SpreadsheetApp.getActiveSpreadsheet(),'absen',teacher).length,2);
 const rootLogin = post({action: 'loginAdmin', username: 'admin-root', password: 'root-secret'});
 const changeId = post({
   action: 'updateMateriId',

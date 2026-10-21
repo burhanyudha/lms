@@ -61,6 +61,104 @@ function rowObjects_(sheet) {
   });
 }
 
+function attendanceHeaders_(sheetName) {
+  return sheetName === "absen"
+    ? ["tanggal", "kelas", "mapel", "guru", "username", "nama", "status", "keterangan", "updated_at"]
+    : ["tanggal", "kelas", "mapel", "guru", "topik", "catatan", "updated_at"];
+}
+
+function getAttendanceSheet_(ss, sheetName) {
+  var sheet = getSheet_(ss, sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.appendRow(attendanceHeaders_(sheetName));
+  } else if (sheet.getLastRow() === 0) {
+    sheet.appendRow(attendanceHeaders_(sheetName));
+  }
+  return sheet;
+}
+
+function upsertAttendanceRows_(ss, sheetName, records, keyFields) {
+  if (!records.length) return;
+  var sheet = getAttendanceSheet_(ss, sheetName);
+  var sheetValues = sheet.getDataRange().getValues();
+  var headers = sheetValues[0].map(function(value) { return value.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+  if (attendanceHeaders_(sheetName).some(function(required) { return headers.indexOf(required.replace(/[^a-z0-9]/g, "")) === -1; })) throw new Error("Struktur tab " + sheetName + " tidak sesuai; data lama tidak diubah.");
+  var values = sheet.getDataRange().getValues();
+  var keyFor = function(row) { return keyFields.map(function(field) {
+    var index = headers.indexOf(field);
+    return index === -1 ? "" : (row[index] || "").toString().trim().toLowerCase();
+  }).join("\u0000"); };
+  var rowsByKey = {};
+  values.slice(1).forEach(function(row, index) { rowsByKey[keyFor(row)] = index + 2; });
+  var appends = [];
+  records.forEach(function(record) {
+    var row = new Array(headers.length).fill("");
+    headers.forEach(function(header, index) {
+      Object.keys(record).some(function(key) {
+        if (key.toLowerCase().replace(/[^a-z0-9]/g, "") !== header) return false;
+        row[index] = record[key];
+        return true;
+      });
+    });
+    var key = keyFields.map(function(field) { return (record[field] || "").toString().trim().toLowerCase(); }).join("\u0000");
+    var rowNumber = rowsByKey[key];
+    if (rowNumber) sheet.getRange(rowNumber, 1, 1, headers.length).setValues([row]);
+    else { rowsByKey[key] = values.length + appends.length + 1; appends.push(row); }
+  });
+  if (appends.length) sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, headers.length).setValues(appends);
+}
+
+function validateAttendanceRequest_(ss, principal, data) {
+  if (!data || !/^\d{4}-\d{2}-\d{2}$/.test((data.tanggal || "").toString()) || !data.kelas || !data.mapel || !Array.isArray(data.absensi)) return false;
+  var parts = data.tanggal.split("-").map(Number);
+  var date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  if (date.getUTCFullYear() !== parts[0] || date.getUTCMonth() !== parts[1] - 1 || date.getUTCDate() !== parts[2]) return false;
+  var statuses = ["Hadir", "Sakit", "Izin", "Alpa", "Telat", "Bolos", "Tidak Memakai Wearpack"];
+  if (data.absensi.length > 500) return false;
+  var className = data.kelas.toString().trim().toUpperCase();
+  var mapel = data.mapel.toString().trim().toLowerCase();
+  var assignedClasses = (principal.kelas || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
+  var assignedSubjects = (principal.mapel || "").toString().toLowerCase().split(/[,;\n]+/).map(function(value) { return value.trim(); }).filter(Boolean);
+  if (principal.accountType !== "admin" || (!principal.isSuperAdmin && (assignedClasses.indexOf(className) === -1 || assignedSubjects.indexOf(mapel) === -1))) return false;
+  var students = rowObjects_(getSheet_(ss, "user"));
+  var seen = {};
+  var valid = data.absensi.every(function(item) {
+    if (!item || typeof item.keterangan === "object" || (item.keterangan || "").toString().length > 300) return false;
+    var username = (item.username || "").toString().trim().toLowerCase();
+    if (!username || seen[username] || statuses.indexOf(item.status) === -1) return false;
+    seen[username] = true;
+    var student = students.find(function(row) { return (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === username; });
+    return !!student && (student.kelas || student.tingkat || "").toString().trim().toUpperCase() === className;
+  });
+  if (!valid) return false;
+  if (data.jurnal && (typeof data.jurnal.topik !== "string" || typeof data.jurnal.catatan !== "string" || data.jurnal.topik.length > 200 || data.jurnal.catatan.length > 1000)) return false;
+  return true;
+}
+
+function saveAttendanceBulk_(ss, principal, data) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var now = new Date().toISOString();
+    var teacher = principal.nama || principal.username;
+    var students = rowObjects_(getSheet_(ss, "user"));
+    var attendance = data.absensi.map(function(item) {
+      var student = students.find(function(row) { return (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === item.username.toString().trim().toLowerCase(); });
+      return {tanggal: data.tanggal, kelas: data.kelas.toString().trim(), mapel: data.mapel.toString().trim(), guru: teacher, username: item.username.toString().trim(), nama: (student && student.nama) || "", status: item.status, keterangan: item.keterangan || "", updated_at: now};
+    });
+    upsertAttendanceRows_(ss, "absen", attendance, ["tanggal", "kelas", "mapel", "username", "guru"]);
+    var journal = data.jurnal || {topik: "", catatan: ""};
+    if (journal.topik.trim() || journal.catatan.trim()) {
+      upsertAttendanceRows_(ss, "jurnal", [{tanggal: data.tanggal, kelas: data.kelas, mapel: data.mapel, guru: teacher, topik: journal.topik.trim(), catatan: journal.catatan.trim(), updated_at: now}], ["tanggal", "kelas", "mapel", "guru"]);
+    }
+    SpreadsheetApp.flush();
+    return {status: "success", saved: attendance.length};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function authenticate_(ss, accountType, username, password) {
   var sheet = ss.getSheetByName(accountType === "admin" ? "admin" : "user");
   if (!sheet || !username || !password || sheet.getLastRow() < 2) return null;
@@ -176,6 +274,9 @@ function getSafeSheetData_(ss, sheetName, principal) {
         return nameClass !== "\u0000" && assignedNameClasses[nameClass] === 1;
       });
     }
+    if (["absen", "jurnal"].indexOf(sheetName) !== -1) return rows.filter(function(row) {
+      return classes.indexOf((row.kelas || "").toString().trim().toUpperCase()) !== -1 && subjects.indexOf((row.mapel || "").toString().trim().toLowerCase()) !== -1;
+    });
     if (sheetName === "materi") return subjects.length ? rows.filter(function(row) {
       return subjects.indexOf((row.mapel || row.matapelajaran || "").toString().trim().toLowerCase()) !== -1;
     }) : [];
@@ -214,15 +315,16 @@ function getSafeSheetData_(ss, sheetName, principal) {
 }
 
 function isAuthorizedAction_(principal, action, sheetName) {
-  if (action === "getData") return ["materi", "soal", "ListNilai", "listNilai", "logTugas", "logLogin", "sesiKuis", "settings", "user", "public_guru", "admin"].indexOf(sheetName) !== -1;
+  if (action === "getData") return ["materi", "soal", "ListNilai", "listNilai", "logTugas", "logLogin", "sesiKuis", "settings", "user", "public_guru", "admin", "absen", "jurnal"].indexOf(sheetName) !== -1;
   if (action === "sessionInfo") return true;
   if (principal.accountType === "student") {
     return ["saveScore", "getTimer", "syncTimer", "uploadTugas"].indexOf(action) !== -1;
   }
   if (action === "reorderData") return false;
-  if (principal.isSuperAdmin) return ["saveData", "deleteData", "saveScore", "getTimer", "syncTimer", "uploadTugas", "updateNilaiByUsernameMateri", "updateNilaiBulk", "koreksiTugasAI", "markTugasRead", "updateMateriId", "createExamFromSelectedQuestions"].indexOf(action) !== -1;
-  if (["saveData", "updateNilaiByUsernameMateri", "updateNilaiBulk", "markTugasRead", "koreksiTugasAI"].indexOf(action) === -1) return false;
+  if (principal.isSuperAdmin) return ["saveData", "deleteData", "saveScore", "getTimer", "syncTimer", "uploadTugas", "updateNilaiByUsernameMateri", "updateNilaiBulk", "koreksiTugasAI", "markTugasRead", "updateMateriId", "createExamFromSelectedQuestions", "saveAttendanceBulk"].indexOf(action) !== -1;
+  if (["saveData", "updateNilaiByUsernameMateri", "updateNilaiBulk", "markTugasRead", "koreksiTugasAI", "saveAttendanceBulk"].indexOf(action) === -1) return false;
   if (action === "saveData") return sheetName === "materi";
+  if (action === "saveAttendanceBulk") return true;
   return ["updateNilaiByUsernameMateri", "updateNilaiBulk", "markTugasRead", "koreksiTugasAI"].indexOf(action) !== -1;
 }
 
@@ -246,6 +348,7 @@ function teacherCanAccessMaterial_(ss, principal, idMateri) {
 
 function validateTeacherRequest_(ss, principal, action, postData) {
   if (principal.accountType !== "admin" || principal.isSuperAdmin) return true;
+  if (action === "saveAttendanceBulk") return validateAttendanceRequest_(ss, principal, postData.data);
   if (action === "saveData") {
     var payload = typeof postData.data === "string" ? JSON.parse(postData.data) : postData.data;
     var assignedSubjects = (principal.mapel || "").toString().toLowerCase().split(/[,;\n]+/).map(function(value) { return value.trim(); }).filter(Boolean);
@@ -366,7 +469,12 @@ function doPost(e) {
   if (action === "sessionInfo") return jsonResponse_({status: "success", user: principal});
   if (action === "getData") return jsonResponse_(getSafeSheetData_(ss, sheetName, principal));
   if (!isAuthorizedAction_(principal, action, sheetName)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Akun ini tidak memiliki izin untuk tindakan tersebut."});
+  if (action === "saveAttendanceBulk" && !validateAttendanceRequest_(ss, principal, postData.data)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Data absensi tidak valid atau di luar kelas/mapel akun ini."});
   if (!validateTeacherRequest_(ss, principal, action, postData)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Tindakan berada di luar kelas atau mapel akun ini."});
+  if (action === "saveAttendanceBulk") {
+    try { return jsonResponse_(saveAttendanceBulk_(ss, principal, postData.data)); }
+    catch (error) { return jsonResponse_({status: "error", message: error.message}); }
+  }
   if (["saveData", "deleteData"].indexOf(action) !== -1) {
     if (sheetName === "materi") {
       var materialPayload = typeof postData.data === "string" ? JSON.parse(postData.data) : postData.data;

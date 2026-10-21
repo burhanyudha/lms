@@ -203,6 +203,8 @@
     <button class="nav-item" id="tabAnalisisD" onclick="showTab('analisis')"><i data-lucide="bar-chart-2"></i> Analisis Soal</button>
     <button class="nav-item" id="tabNilaiD" onclick="showTab('nilai')"><i data-lucide="graduation-cap"></i> Input Nilai</button>
     <button class="nav-item" id="tabTugasD" onclick="showTab('tugas')"><i data-lucide="file-text"></i> Tugas</button>
+    <button class="nav-item" id="tabAbsenD" onclick="showTab('absen')"><i data-lucide="calendar-check"></i> Absensi Harian</button>
+    <button class="nav-item" id="tabRekapAbsenD" onclick="showTab('rekapAbsen')"><i data-lucide="calendar-days"></i> Rekap Absensi</button>
     <button class="nav-item" id="tabRankingD" onclick="showTab('ranking')"><i data-lucide="award"></i> Peringkat</button>
     <button class="nav-item" id="tabRekapD" onclick="showTab('rekap')"><i data-lucide="clipboard-list"></i> Rekap Nilai</button>
     <button class="nav-item" id="tabUsersD" onclick="showTab('users')"><i data-lucide="users"></i> Pengguna</button>
@@ -219,6 +221,8 @@
     <button class="nav-item" id="tabTugas" onclick="showTab('tugas')"><i data-lucide="file-text"></i> Tugas</button>
     <button class="nav-item" id="tabRanking" onclick="showTab('ranking')"><i data-lucide="award"></i> Peringkat</button>
     <button class="nav-item" id="tabRekap" onclick="showTab('rekap')"><i data-lucide="clipboard-list"></i> Rekap</button>
+    <button class="nav-item" id="tabAbsen" onclick="showTab('absen')"><i data-lucide="calendar-check"></i> Absen</button>
+    <button class="nav-item" id="tabRekapAbsen" onclick="showTab('rekapAbsen')"><i data-lucide="calendar-days"></i> Kehadiran</button>
   </nav>
 
   <main class="main-content">
@@ -677,6 +681,24 @@
         </div>
       </section>
 
+      <section id="absenSection" style="display:none">
+        <div class="header-section"><div><h1>Absensi Harian</h1><p style="color:var(--text-muted)">Catat kehadiran per kelas, tanggal, dan mata pelajaran.</p></div></div>
+        <div class="card"><div class="filter-bar">
+          <select class="form-control" id="filterKelasAbsen" onchange="renderAbsensiHarian()"><option value="">Pilih kelas</option></select>
+          <select class="form-control" id="filterMapelAbsen" onchange="renderAbsensiHarian()"><option value="">Pilih mata pelajaran</option></select>
+          <input class="form-control" id="filterTanggalAbsen" type="date" onchange="renderAbsensiHarian()">
+        </div><div class="table-responsive"><table><thead><tr><th>Nama siswa</th><th>Status</th><th>Keterangan</th></tr></thead><tbody id="absensiTableBody"><tr><td colspan="3">Pilih kelas dan mata pelajaran.</td></tr></tbody></table></div>
+          <div style="padding:16px 20px;display:grid;gap:12px"><label>Topik jurnal pelajaran<input class="form-control" id="absensiTopik" maxlength="200"></label><label>Catatan<input class="form-control" id="absensiCatatan" maxlength="1000"></label><button class="btn btn-primary" onclick="simpanAbsensi()">Simpan absensi & jurnal</button></div>
+        </div>
+      </section>
+      <section id="rekapAbsenSection" style="display:none">
+        <div class="header-section"><div><h1>Rekap Absensi</h1><p style="color:var(--text-muted)">Riwayat kehadiran dan jurnal pelajaran per bulan.</p></div></div>
+        <div class="card"><div class="filter-bar"><select class="form-control" id="rekapKelasAbsen" onchange="renderRekapAbsensi()"><option value="">Pilih kelas</option></select><select class="form-control" id="rekapMapelAbsen" onchange="renderRekapAbsensi()"><option value="">Pilih mata pelajaran</option></select><input class="form-control" id="rekapBulanAbsen" type="month" onchange="renderRekapAbsensi()"></div>
+          <div class="table-responsive" style="max-height:65vh;overflow:auto"><table style="min-width:900px"><thead id="rekapAbsenHeader"></thead><tbody id="rekapAbsenBody"></tbody></table></div>
+          <div style="padding:16px 20px"><h3>Jurnal pelajaran</h3><div id="jurnalAbsenBody">Belum ada jurnal.</div></div>
+        </div>
+      </section>
+
       <!-- ================= SECTION: REKAP NILAI ================= -->
       <section id="rekapSection" style="display:none">
         <div class="header-section">
@@ -876,6 +898,8 @@
     let dataUser = [];
     let dataLogLogin = [];
     let dataLogTugas = [];
+    let dataAbsen = [];
+    let dataJurnal = [];
     let activeFilteredTugas = [];
     let dataSettings = [];
     let dataGuru = [];
@@ -988,14 +1012,14 @@
     };
 
     function showTab(tabName) {
-      ['dashboardSection', 'materiSection', 'nilaiSection', 'usersSection', 'settingsSection', 'tugasSection', 'rankingSection', 'rekapSection', 'analisisSection', 'guruSection'].forEach(s => {
+      ['dashboardSection', 'materiSection', 'nilaiSection', 'usersSection', 'settingsSection', 'tugasSection', 'rankingSection', 'rekapSection', 'analisisSection', 'guruSection', 'absenSection', 'rekapAbsenSection'].forEach(s => {
         let el = document.getElementById(s);
         if (el) el.style.display = 'none';
       });
       let targetSec = document.getElementById(tabName + 'Section');
       if (targetSec) targetSec.style.display = 'block';
       
-      ['tabDashboard', 'tabMateri', 'tabNilai', 'tabUsers', 'tabSettings', 'tabTugas', 'tabRanking', 'tabRekap', 'tabAnalisis', 'tabGuru'].forEach(id => {
+      ['tabDashboard', 'tabMateri', 'tabNilai', 'tabUsers', 'tabSettings', 'tabTugas', 'tabRanking', 'tabRekap', 'tabAnalisis', 'tabGuru', 'tabAbsen', 'tabRekapAbsen'].forEach(id => {
         let el = document.getElementById(id); if(el) el.classList.remove('active');
         let elD = document.getElementById(id+'D'); if(elD) elD.classList.remove('active');
       });
@@ -1008,6 +1032,8 @@
         populateFilterAnalisis();
       }
       if (tabName === 'rekap') loadAllData();
+      if (tabName === 'absen') renderAbsensiHarian();
+      if (tabName === 'rekapAbsen') renderRekapAbsensi();
     }
 
     // Fungsi getTingkat yang identik dengan dashboard.html
@@ -1048,13 +1074,15 @@
       showOverlay("Mengambil data dari Spreadsheet...");
       try {
         const t = new Date().getTime(); // Cache buster
-        const [resM, resN, resU, resL, resS, resT] = await Promise.all([
+        const [resM, resN, resU, resL, resS, resT, resA, resJ] = await Promise.all([
           fetch(`${API_URL}?sheet=materi&_t=${t}`),
           fetch(`${API_URL}?sheet=listNilai&_t=${t}`),
           fetch(`${API_URL}?sheet=user&_t=${t}`),
           fetch(`${API_URL}?sheet=logLogin&_t=${t}`),
           fetch(`${API_URL}?sheet=settings&_t=${t}`),
-          fetch(`${API_URL}?sheet=logTugas&_t=${t}`).catch(() => ({ json: async () => [] }))
+          fetch(`${API_URL}?sheet=logTugas&_t=${t}`).catch(() => ({ json: async () => [] })),
+          fetch(`${API_URL}?sheet=absen&_t=${t}`).catch(() => ({ json: async () => [] })),
+          fetch(`${API_URL}?sheet=jurnal&_t=${t}`).catch(() => ({ json: async () => [] }))
         ]);
 
         dataMateri = await resM.json();
@@ -1063,6 +1091,8 @@
         dataLogLogin = await resL.json();
         dataSettings = await resS.json();
         dataLogTugas = await resT.json();
+        dataAbsen = await resA.json();
+        dataJurnal = await resJ.json();
 
         // Penyaringan Data Global untuk Guru Biasa
         if (!IS_SUPER_ADMIN) {
@@ -1149,6 +1179,9 @@
         populateFilterRanking();
         renderRankingAdmin();
         populateFilterRekap();
+        populateFilterAbsensi();
+        renderAbsensiHarian();
+        renderRekapAbsensi();
         if (IS_SUPER_ADMIN) renderTableGuru();
         
         hideOverlay();
@@ -2642,6 +2675,47 @@ window.koreksiTugasAI = async function(rowNumber) {
     // ============================================
     // REKAP NILAI & PROGRES
     // ============================================
+    function populateFilterAbsensi() {
+      const classes = [...new Set(dataUser.map(u => (getVal(u, ['kelas','tingkat']) || '').toString().trim()).filter(Boolean))].sort();
+      const subjects = [...new Set(dataMateri.map(m => (getVal(m, ['mapel','matapelajaran']) || '').toString().trim()).filter(Boolean))].sort();
+      ['filterKelasAbsen','rekapKelasAbsen'].forEach(id => { const el=document.getElementById(id), old=el.value; el.innerHTML='<option value="">Pilih kelas</option>'+classes.map(v=>`<option value="${escapeAttendanceHtml(v)}">${escapeAttendanceHtml(v)}</option>`).join(''); if(classes.includes(old))el.value=old; });
+      ['filterMapelAbsen','rekapMapelAbsen'].forEach(id => { const el=document.getElementById(id), old=el.value; el.innerHTML='<option value="">Pilih mata pelajaran</option>'+subjects.map(v=>`<option value="${escapeAttendanceHtml(v)}">${escapeAttendanceHtml(v)}</option>`).join(''); if(subjects.includes(old))el.value=old; });
+      const today=new Date(), localDate=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      const date=document.getElementById('filterTanggalAbsen'); if(!date.value)date.value=localDate;
+      const month=document.getElementById('rekapBulanAbsen'); if(!month.value)month.value=localDate.slice(0,7);
+    }
+    function escapeAttendanceHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    const ABSEN_STATUSES=['Hadir','Sakit','Izin','Alpa','Telat','Bolos','Tidak Memakai Wearpack'];
+    function attendanceKey(row) { return ['tanggal','kelas','mapel'].map(k=>(getVal(row,[k])||'').toString().trim().toLowerCase()).join('|'); }
+    function renderAbsensiHarian() {
+      const kelas=document.getElementById('filterKelasAbsen').value, mapel=document.getElementById('filterMapelAbsen').value, tanggal=document.getElementById('filterTanggalAbsen').value;
+      const body=document.getElementById('absensiTableBody'); if(!kelas||!mapel||!tanggal){body.innerHTML='<tr><td colspan="3">Pilih kelas, mata pelajaran, dan tanggal.</td></tr>';return;}
+      const students=dataUser.filter(u=>(getVal(u,['kelas','tingkat'])||'').toString().trim().toLowerCase()===kelas.toLowerCase()).sort((a,b)=>(getVal(a,['nama'])||'').localeCompare(getVal(b,['nama'])||''));
+      const existing=new Map(dataAbsen.filter(r=>attendanceKey(r)===[tanggal,kelas,mapel].map(v=>v.toLowerCase()).join('|')).map(r=>[(getVal(r,['username'])||'').toString().trim().toLowerCase(),r]));
+      body.innerHTML=students.length?students.map(s=>{const user=getVal(s,['username','nisn','nis'])||'', saved=existing.get(String(user).toLowerCase()), status=getVal(saved||{},['status'])||'', note=getVal(saved||{},['keterangan'])||'';return `<tr data-user="${escapeAttendanceHtml(user)}"><td>${escapeAttendanceHtml(getVal(s,['nama'])||user)}</td><td><select class="form-control abs-status" aria-label="Status ${escapeAttendanceHtml(getVal(s,['nama'])||user)}"><option value="">Pilih status</option>${ABSEN_STATUSES.map(v=>`<option ${v===status?'selected':''}>${escapeAttendanceHtml(v)}</option>`).join('')}</select></td><td><input class="form-control abs-note" maxlength="300" value="${escapeAttendanceHtml(note)}" aria-label="Keterangan ${escapeAttendanceHtml(getVal(s,['nama'])||user)}"></td></tr>`}).join(''):'<tr><td colspan="3">Tidak ada siswa di kelas ini.</td></tr>';
+      const journal=dataJurnal.find(r=>attendanceKey(r)===[tanggal,kelas,mapel].map(v=>v.toLowerCase()).join('|')); document.getElementById('absensiTopik').value=getVal(journal||{},['topik'])||''; document.getElementById('absensiCatatan').value=getVal(journal||{},['catatan'])||'';
+    }
+    async function simpanAbsensi() {
+      const tanggal=document.getElementById('filterTanggalAbsen').value, kelas=document.getElementById('filterKelasAbsen').value, mapel=document.getElementById('filterMapelAbsen').value;
+      const rows=[...document.querySelectorAll('#absensiTableBody tr[data-user]')]; if(!tanggal||!kelas||!mapel||!rows.length){alert('Pilih kelas, mapel, dan tanggal terlebih dahulu.');return;}
+      const absensi=rows.map(row=>({username:row.dataset.user,status:row.querySelector('.abs-status').value,keterangan:row.querySelector('.abs-note').value}));
+      const missing=absensi.find(item=>!ABSEN_STATUSES.includes(item.status)); if(missing){alert('Pilih status untuk semua siswa sebelum menyimpan.');return;}
+      showOverlay('Menyimpan absensi...');
+      try { const response=await lmsApi.call('saveAttendanceBulk',{data:{tanggal,kelas,mapel,absensi,jurnal:{topik:document.getElementById('absensiTopik').value,catatan:document.getElementById('absensiCatatan').value}}}); const result=await response.json(); if(result.status!=='success')throw new Error(result.message||'Gagal menyimpan.'); await loadAllData(); alert(`Absensi tersimpan untuk ${result.saved} siswa.`); }
+      catch(error){hideOverlay();alert(error.message||'Gagal menyimpan absensi.');}
+    }
+    function renderRekapAbsensi() {
+      const kelas=document.getElementById('rekapKelasAbsen').value, mapel=document.getElementById('rekapMapelAbsen').value, month=document.getElementById('rekapBulanAbsen').value;
+      const header=document.getElementById('rekapAbsenHeader'), body=document.getElementById('rekapAbsenBody'); if(!kelas||!mapel||!month){header.innerHTML='';body.innerHTML='<tr><td>Pilih kelas, mapel, dan bulan.</td></tr>';return;}
+      const days=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate(), rows=dataAbsen.filter(r=>(getVal(r,['kelas'])||'').toString().trim().toLowerCase()===kelas.toLowerCase()&&(getVal(r,['mapel'])||'').toString().trim().toLowerCase()===mapel.toLowerCase()&&(getVal(r,['tanggal'])||'').toString().slice(0,7)===month);
+      const students=dataUser.filter(u=>(getVal(u,['kelas','tingkat'])||'').toString().trim().toLowerCase()===kelas.toLowerCase()).sort((a,b)=>(getVal(a,['nama'])||'').localeCompare(getVal(b,['nama'])||''));
+      header.innerHTML='<tr><th>Nama siswa</th>'+Array.from({length:days},(_,i)=>`<th>${i+1}</th>`).join('')+'<th>H</th><th>S</th><th>I</th><th>A</th><th>T</th><th>B</th><th>W</th></tr>';
+      const mark={'Hadir':'H','Sakit':'S','Izin':'I','Alpa':'A','Telat':'T','Bolos':'B','Tidak Memakai Wearpack':'W'};
+      body.innerHTML=students.map(student=>{const username=String(getVal(student,['username','nisn','nis'])||'').toLowerCase(), own=rows.filter(r=>String(getVal(r,['username'])||'').toLowerCase()===username), byDate=new Map(own.map(r=>[(getVal(r,['tanggal'])||'').toString().slice(8,10),getVal(r,['status'])||''])), counts=Object.fromEntries(ABSEN_STATUSES.map(s=>[s,own.filter(r=>getVal(r,['status'])===s).length]));return `<tr><td>${escapeAttendanceHtml(getVal(student,['nama'])||username)}</td>${Array.from({length:days},(_,i)=>{const s=byDate.get(String(i+1).padStart(2,'0'))||'';return `<td title="${escapeAttendanceHtml(s)}">${mark[s]||'·'}</td>`}).join('')}<td>${counts.Hadir}</td><td>${counts.Sakit}</td><td>${counts.Izin}</td><td>${counts.Alpa}</td><td>${counts.Telat}</td><td>${counts.Bolos}</td><td>${counts['Tidak Memakai Wearpack']}</td></tr>`}).join('')||'<tr><td colspan="40">Tidak ada siswa.</td></tr>';
+      const journals=dataJurnal.filter(r=>(getVal(r,['kelas'])||'').toString().trim().toLowerCase()===kelas.toLowerCase()&&(getVal(r,['mapel'])||'').toString().trim().toLowerCase()===mapel.toLowerCase()&&(getVal(r,['tanggal'])||'').toString().slice(0,7)===month).sort((a,b)=>String(getVal(a,['tanggal'])||'').localeCompare(String(getVal(b,['tanggal'])||'')));
+      document.getElementById('jurnalAbsenBody').innerHTML=journals.length?'<ul>'+journals.map(r=>`<li><b>${escapeAttendanceHtml(getVal(r,['tanggal']))} — ${escapeAttendanceHtml(getVal(r,['topik']))}</b>: ${escapeAttendanceHtml(getVal(r,['catatan']))}</li>`).join('')+'</ul>':'Belum ada jurnal.';
+    }
+
     function populateFilterRekap() {
       let kelasList = [...new Set(dataUser.map(u => (getVal(u, ['kelas', 'tingkat']) || "").toString().trim()))].filter(k => k !== "").sort();
       let sel = document.getElementById('filterKelasRekap');

@@ -1351,6 +1351,9 @@
         kelasArray.forEach(k => {
           filterDropdown.innerHTML += `<option value="${k}">${k}</option>`;
         });
+        const priorClass = filterDropdown.dataset.initialized === 'true' ? filterDropdown.value : '';
+        filterDropdown.value = kelasArray.includes(priorClass) ? priorClass : kelasArray.includes(user.kelas) ? user.kelas : 'Semua';
+        filterDropdown.dataset.initialized = 'true';
 
         filterRanking();
 

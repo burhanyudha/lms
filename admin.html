@@ -13,6 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <script src="pwa-handler.js" defer></script>
   <script src="rekap-match.js"></script>
+  <script src="ranking-aggregate.js"></script>
   <script src="lms-api.js"></script>
 
   <style>
@@ -2003,14 +2004,10 @@ window.koreksiTugasAI = async function(rowNumber) {
     function renderRankingAdmin() {
       const selTingkat = document.getElementById('filterTingkatRanking') ? document.getElementById('filterTingkatRanking').value : "";
       const selKelas = document.getElementById('filterKelasRanking') ? document.getElementById('filterKelasRanking').value : "";
-      
-      const userMap = new Map();
-      
-      // Filter user (hanya siswa, bukan admin)
-      dataUser.forEach(u => {
-        let k = getVal(u, ['kelas', 'rombel']) || "Tanpa Kelas";
+      const rankingStudents = dataUser.filter(u => {
+        if ((getVal(u, ['role', 'peran']) || '').toString().toLowerCase().includes('admin')) return false;
+        let k = getVal(u, ['kelas', 'rombel', 'tingkat']) || "Tanpa Kelas";
         let t = getVal(u, ['tingkat']) || "";
-        
         // Coba deduksi tingkat dari kelas jika kolom tingkat kosong
         if (!t || t.trim() === "") {
            let kUpper = k.toUpperCase();
@@ -2019,77 +2016,9 @@ window.koreksiTugasAI = async function(rowNumber) {
            else if (kUpper.startsWith("X")) t = "X";
         }
         
-        if (selTingkat && selTingkat !== "" && t !== selTingkat) return; // filter tingkat
-        if (selKelas && selKelas !== "" && k !== selKelas) return; // filter kelas
-        
-        const uname = (getVal(u, ['username', 'nisn', 'nis']) || "").toString().trim();
-        if (uname) {
-          userMap.set(uname, {
-            username: uname,
-            nama: getVal(u, ['nama', 'namalengkap', 'namasiswa']) || uname,
-            kelas: k,
-            tingkat: t,
-            quizzes: new Map()
-          });
-        }
+        return (!selTingkat || t === selTingkat) && (!selKelas || k === selKelas);
       });
-
-      // Gabungkan data nilai & tugas
-      let gabunganNilai = (Array.isArray(dataNilai) ? dataNilai : []).concat(Array.isArray(dataLogTugas) ? dataLogTugas : []);
-
-      gabunganNilai.forEach(n => {
-        let pTipe = getVal(n, ['tipe', 'tipeevaluasi', 'jenis']);
-        if (pTipe && pTipe.toString().toLowerCase() === "materi") return; 
-
-        const uname = (getVal(n, ['username', 'nisn', 'nis']) || "").toString().trim();
-        if (!userMap.has(uname)) return; // hanya proses siswa yang sesuai filter
-
-        const mid = (getVal(n, ['id_materi', 'idmateri', 'materi', 'modul', 'id']) || "").toString();
-        let pNilai = getVal(n, ['nilai', 'skor', 'point']);
-        
-        if (pNilai === undefined || pNilai === null || pNilai.toString().trim() === "" || pNilai.toString().includes("Terkirim")) return;
-
-        const score = parseInt(pNilai) || 0;
-        const waktuSec = parseTimeToSeconds(getVal(n, ['waktu', 'timestamp']));
-
-        const userObj = userMap.get(uname);
-        const existing = userObj.quizzes.get(mid);
-        if (!existing) {
-          userObj.quizzes.set(mid, { score, waktuSec });
-        } else {
-          if (score > existing.score) {
-            userObj.quizzes.set(mid, { score, waktuSec });
-          } else if (score === existing.score && waktuSec < existing.waktuSec) {
-            userObj.quizzes.set(mid, { score, waktuSec });
-          }
-        }
-      });
-
-      let aggregatedData = [];
-      userMap.forEach(userObj => {
-        let totalScore = 0;
-        let totalTimeSec = 0;
-        userObj.quizzes.forEach(q => {
-          totalScore += q.score;
-          totalTimeSec += q.waktuSec;
-        });
-
-        if (totalScore > 0) { // Hanya tampilkan yang punya poin
-          aggregatedData.push({
-            nama: userObj.nama,
-            kelas: userObj.kelas,
-            nilai: totalScore,
-            waktuSec: totalTimeSec,
-            waktu: formatSecondsToTime(totalTimeSec)
-          });
-        }
-      });
-
-      // Sort: Nilai Tertinggi -> Waktu Tercepat
-      aggregatedData.sort((a, b) => {
-        if (b.nilai !== a.nilai) return b.nilai - a.nilai;
-        return a.waktuSec - b.waktuSec;
-      });
+      const aggregatedData = aggregateRanking(rankingStudents, dataNilai, dataLogTugas).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
 
       let html = '';
       aggregatedData.forEach((d, i) => {

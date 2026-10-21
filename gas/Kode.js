@@ -155,7 +155,7 @@ function getSafeSheetData_(ss, sheetName, principal) {
   var username = principal.username.toString().trim().toLowerCase();
   if (principal.accountType === "admin") {
     var classes = (principal.kelas || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
-    var subject = (principal.mapel || "").toString().trim().toLowerCase();
+    var subjects = (principal.mapel || "").toString().toLowerCase().split(/[,;\n]+/).map(function(value) { return value.trim(); }).filter(Boolean);
     var assignedUsers = rowObjects_(getSheet_(ss, "user")).filter(function(row) {
       return classes.indexOf((row.kelas || row.tingkat || "").toString().trim().toUpperCase()) !== -1;
     });
@@ -176,8 +176,8 @@ function getSafeSheetData_(ss, sheetName, principal) {
         return nameClass !== "\u0000" && assignedNameClasses[nameClass] === 1;
       });
     }
-    if (sheetName === "materi") return subject ? rows.filter(function(row) {
-      return (row.mapel || row.matapelajaran || "").toString().trim().toLowerCase() === subject;
+    if (sheetName === "materi") return subjects.length ? rows.filter(function(row) {
+      return subjects.indexOf((row.mapel || row.matapelajaran || "").toString().trim().toLowerCase()) !== -1;
     }) : [];
     if (sheetName === "soal") {
       var ids = {};
@@ -240,20 +240,22 @@ function teacherCanAccessMaterial_(ss, principal, idMateri) {
   var matches = materials.filter(function(row) {
     return (row.id_materi || row.idmateri || row.materiid || row.id || "").toString().trim() === (idMateri || "").toString().trim();
   });
-  return matches.length === 1 && (matches[0].mapel || matches[0].matapelajaran || "").toString().trim().toLowerCase() === (principal.mapel || "").toString().trim().toLowerCase();
+  var subjects = (principal.mapel || "").toString().toLowerCase().split(/[,;\n]+/).map(function(value) { return value.trim(); }).filter(Boolean);
+  return matches.length === 1 && subjects.indexOf((matches[0].mapel || matches[0].matapelajaran || "").toString().trim().toLowerCase()) !== -1;
 }
 
 function validateTeacherRequest_(ss, principal, action, postData) {
   if (principal.accountType !== "admin" || principal.isSuperAdmin) return true;
   if (action === "saveData") {
     var payload = typeof postData.data === "string" ? JSON.parse(postData.data) : postData.data;
-    if (!payload || (payload.mapel || payload.matapelajaran || "").toString().trim().toLowerCase() !== (principal.mapel || "").toString().trim().toLowerCase()) return false;
+    var assignedSubjects = (principal.mapel || "").toString().toLowerCase().split(/[,;\n]+/).map(function(value) { return value.trim(); }).filter(Boolean);
+    if (!payload || assignedSubjects.indexOf((payload.mapel || payload.matapelajaran || "").toString().trim().toLowerCase()) === -1) return false;
     var assigned = (principal.kelas || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
     var targetClasses = (payload.kelas || payload.tingkat || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
     if (!targetClasses.length || !targetClasses.every(function(value) { return assigned.indexOf(value) !== -1; })) return false;
     if (postData.rowNumber) {
       var existing = rowObjects_(getSheet_(ss, "materi")).find(function(row) { return row.rowNumber === Number(postData.rowNumber); });
-      if (!existing || (existing.mapel || existing.matapelajaran || "").toString().trim().toLowerCase() !== (principal.mapel || "").toString().trim().toLowerCase()) return false;
+      if (!existing || (existing.mapel || existing.matapelajaran || "").toString().trim().toLowerCase() !== (payload.mapel || payload.matapelajaran || "").toString().trim().toLowerCase()) return false;
       var existingClasses = (existing.kelas || existing.tingkat || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
       if (!existingClasses.length || !existingClasses.every(function(value) {
         return value === "SEMUA" ? false : assigned.some(function(assignedClass) { return pureGrade_(assignedClass) === pureGrade_(value); });

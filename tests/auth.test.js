@@ -10,13 +10,14 @@ const rowsBySheet = {
   ],
   admin: [
     ['username', 'password', 'nama', 'role', 'kelas', 'mapel'],
-    ['teacher-x', 'teacher-secret', 'Teacher X', 'Guru', 'X TKR 1', 'Informatika'],
+    ['teacher-x', 'teacher-secret', 'Teacher X', 'Guru', 'X TKR 1', 'Informatika, Dasar-Dasar Otomotif'],
     ['admin-root', 'root-secret', 'Admin Root', 'Administrator', '', '']
   ],
   materi: [
     ['id_materi', 'judul', 'tingkat', 'status', 'mapel'],
     ['MAT-X', 'Materi X', 'X', 'Aktif', 'Informatika'],
-    ['MAT-XI', 'Materi XI', 'XI', 'Aktif', 'Informatika']
+    ['MAT-XI', 'Materi XI', 'XI', 'Aktif', 'Informatika'],
+    ['MAT-X-OTO', 'Materi Otomotif', 'X', 'Aktif', 'Dasar-Dasar Otomotif']
   ],
   soal: [
     ['id_materi', 'id', 'tingkat', 'pertanyaan', 'kunci', 'jawaban', 'opsi_a'],
@@ -114,12 +115,21 @@ const teacherLogin = post({action: 'loginAdmin', username: 'teacher-x', password
 const teacher = context.getSession_(teacherLogin.token);
 assert.equal(teacher.accountType, 'admin');
 assert.equal(teacher.isSuperAdmin, false);
+assert.deepEqual(context.getSafeSheetData_(context.SpreadsheetApp.getActiveSpreadsheet(), 'materi', teacher).map(row => row.id_materi), ['MAT-X', 'MAT-XI', 'MAT-X-OTO']);
+assert.equal(context.teacherCanAccessMaterial_(context.SpreadsheetApp.getActiveSpreadsheet(), teacher, 'MAT-X-OTO'), true);
+assert.equal(context.teacherCanAccessMaterial_(context.SpreadsheetApp.getActiveSpreadsheet(), teacher, 'MAT-XI'), true);
 assert.equal(context.validateTeacherRequest_(
   context.SpreadsheetApp.getActiveSpreadsheet(),
   teacher,
   'saveData',
   {rowNumber: 2, data: JSON.stringify({mapel: 'Informatika', kelas: 'X TKR 1'})}
 ), true);
+assert.equal(context.validateTeacherRequest_(
+  context.SpreadsheetApp.getActiveSpreadsheet(),
+  teacher,
+  'saveData',
+  {rowNumber: 2, data: JSON.stringify({mapel: 'Dasar-Dasar Otomotif', kelas: 'X TKR 1'})}
+), false);
 assert.equal(context.validateTeacherRequest_(
   context.SpreadsheetApp.getActiveSpreadsheet(),
   teacher,

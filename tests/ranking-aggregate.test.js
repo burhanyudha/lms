@@ -10,6 +10,11 @@ const context = {getVal: (row, keys) => {
   return key ? row[key] : undefined;
 }, parseTimeToSeconds: () => 0, getTingkatSync: () => ''};
 const aggregateRanking = vm.runInNewContext(`(${source.replace('function buildRankingData', 'function')})`, context);
+const dashboard = fs.readFileSync('dashboard.html', 'utf8');
+const classSource = dashboard.match(/function normalizeRankingClass\(value\) \{[^\n]*\}/)[0];
+const normalizeRankingClass = vm.runInNewContext(`(${classSource.replace('function normalizeRankingClass', 'function')})`);
+assert.equal(normalizeRankingClass('X-TKR 3'), normalizeRankingClass('X TKR 3'));
+assert.notEqual(normalizeRankingClass('X TKR 3'), normalizeRankingClass('X TKR 4'));
 
 const students = [
   {username: 'nisn-1', nama: 'Siswa Satu', kelas: 'X TKR 1'},

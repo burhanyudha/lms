@@ -1311,6 +1311,7 @@
     }
 
     let rankingSource = {scores: [], students: [], tasks: [], materials: []};
+    function normalizeRankingClass(value) { return (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
     function renderRanking(rawNilai, dataUser, dataLogTugas = [], materials = []) {
       const fullList = document.getElementById("rankingList");
@@ -1352,7 +1353,11 @@
           filterDropdown.innerHTML += `<option value="${k}">${k}</option>`;
         });
         const priorClass = filterDropdown.dataset.initialized === 'true' ? filterDropdown.value : '';
-        filterDropdown.value = kelasArray.includes(priorClass) ? priorClass : kelasArray.includes(user.kelas) ? user.kelas : 'Semua';
+        const ownClass = (user.kelas || user.Kelas || '').toString().trim();
+        const matchingClass = value => kelasArray.find(k => normalizeRankingClass(k) === normalizeRankingClass(value));
+        const preferredClass = matchingClass(priorClass) || matchingClass(ownClass) || ownClass;
+        if (preferredClass && !kelasArray.includes(preferredClass)) filterDropdown.add(new Option(preferredClass, preferredClass), 1);
+        filterDropdown.value = preferredClass || 'Semua';
         filterDropdown.dataset.initialized = 'true';
 
         filterRanking();
@@ -1371,7 +1376,7 @@
       const selectedMapel = document.getElementById('filterMapelRankingSiswa')?.value || 'Semua';
       const materialIds = new Set(rankingSource.materials.filter(m => selectedMapel === 'Semua' || (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || '').toString().trim() === selectedMapel).map(m => (m.id_materi || m.idmateri || m.materiid || m.id || '').toString().trim()).filter(Boolean));
       let filteredData = buildRankingData(rankingSource.students, rankingSource.scores, rankingSource.tasks, materialIds).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
-      if (filterKelas !== "Semua") filteredData = filteredData.filter(u => u.kelas === filterKelas);
+      if (filterKelas !== "Semua") filteredData = filteredData.filter(u => normalizeRankingClass(u.kelas) === normalizeRankingClass(filterKelas));
 
       globalRankingData = filteredData;
       const myRankIndex = filteredData.findIndex(u => u.username.toString().trim().toLowerCase() === (user.username || user.nisn || user.nis || '').toString().trim().toLowerCase());

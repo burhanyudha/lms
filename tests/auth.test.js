@@ -23,11 +23,15 @@ const rowsBySheet = {
     ['MAT-X', 'Q1', 'X', 'Question', 'A', 'A', 'Alpha']
   ],
   ListNilai: [
-    ['username', 'id_materi', 'nilai'],
-    ['student-x', 'MAT-X', 80],
-    ['student-y', 'MAT-XI', 90]
+    ['username', 'nama', 'kelas', 'id_materi', 'nilai'],
+    ['student-x', 'Student X', 'X TKR 1', 'MAT-X', 80],
+    ['student-y', 'Student Y', 'XI RPL 1', 'MAT-XI', 90],
+    ['old-student-id', 'Student X', 'X TKR 1', 'MAT-X', 65]
   ],
-  logTugas: [['username', 'id_materi']],
+  logTugas: [
+    ['username', 'nama', 'kelas', 'id_materi'],
+    ['old-student-id', 'Student X', 'X TKR 1', 'MAT-X']
+  ],
   logLogin: [['username', 'nama', 'kelas', 'waktu', 'status']],
   settings: [['key', 'value'], ['MAX_UPLOAD_SIZE', 5]]
 };
@@ -122,6 +126,8 @@ assert.equal(context.validateTeacherRequest_(
   'saveData',
   {rowNumber: 3, data: JSON.stringify({mapel: 'Informatika', kelas: 'X TKR 1'})}
 ), false);
+assert.equal(context.getSafeSheetData_(context.SpreadsheetApp.getActiveSpreadsheet(), 'logTugas', teacher).length, 1);
+assert.equal(context.getSafeSheetData_(context.SpreadsheetApp.getActiveSpreadsheet(), 'ListNilai', teacher).length, 2);
 assert.equal(post({
   action: 'updateNilaiByUsernameMateri',
   username: 'student-y',

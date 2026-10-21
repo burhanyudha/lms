@@ -160,11 +160,21 @@ function getSafeSheetData_(ss, sheetName, principal) {
       return classes.indexOf((row.kelas || row.tingkat || "").toString().trim().toUpperCase()) !== -1;
     });
     var assignedUserIds = {};
-    assignedUsers.forEach(function(row) { assignedUserIds[(row.username || row.nisn || "").toString().trim().toLowerCase()] = true; });
+    var assignedNameClasses = {};
+    var normalizeLegacyIdentity = function(value) { return (value || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, ""); };
+    assignedUsers.forEach(function(row) {
+      assignedUserIds[(row.username || row.nisn || row.nis || "").toString().trim().toLowerCase()] = true;
+      var nameClass = normalizeLegacyIdentity(row.nama) + "\u0000" + normalizeLegacyIdentity(row.kelas || row.tingkat);
+      if (nameClass !== "\u0000") assignedNameClasses[nameClass] = (assignedNameClasses[nameClass] || 0) + 1;
+    });
     if (sheetName === "admin" || sheetName === "settings") return [];
     if (sheetName === "user") return assignedUsers;
     if (["ListNilai", "listNilai", "logTugas", "logLogin"].indexOf(sheetName) !== -1) {
-      return rows.filter(function(row) { return assignedUserIds[(row.username || row.nisn || "").toString().trim().toLowerCase()]; });
+      return rows.filter(function(row) {
+        if (assignedUserIds[(row.username || row.nisn || row.nis || "").toString().trim().toLowerCase()]) return true;
+        var nameClass = normalizeLegacyIdentity(row.nama || row.namasiswa || row.namalengkap) + "\u0000" + normalizeLegacyIdentity(row.kelas || row.tingkat);
+        return nameClass !== "\u0000" && assignedNameClasses[nameClass] === 1;
+      });
     }
     if (sheetName === "materi") return subject ? rows.filter(function(row) {
       return (row.mapel || row.matapelajaran || "").toString().trim().toLowerCase() === subject;
@@ -177,10 +187,10 @@ function getSafeSheetData_(ss, sheetName, principal) {
     return [];
   }
   if (sheetName === "admin") return [];
-  var studentRow = rowObjects_(getSheet_(ss, "user")).find(function(row) { return (row.username || row.nisn || "").toString().trim().toLowerCase() === username; });
+  var studentRow = rowObjects_(getSheet_(ss, "user")).find(function(row) { return (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === username; });
   if (sheetName === "user") return studentRow ? [studentRow] : [];
   if (["ListNilai", "listNilai", "logTugas", "logLogin", "sesiKuis"].indexOf(sheetName) !== -1) {
-    return rows.filter(function(row) { return (row.username || row.nisn || "").toString().trim().toLowerCase() === username; });
+    return rows.filter(function(row) { return (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === username; });
   }
   if (sheetName === "settings") return rows.filter(function(row) { return (row.key || row.Key || "").toString().toUpperCase() === "MAX_UPLOAD_SIZE"; });
   if (["materi", "soal"].indexOf(sheetName) !== -1) {
@@ -219,7 +229,7 @@ function isAuthorizedAction_(principal, action, sheetName) {
 function teacherCanAccessStudent_(ss, principal, username, classValue) {
   var assigned = (principal.kelas || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
   var student = rowObjects_(getSheet_(ss, "user")).find(function(row) {
-    return (row.username || row.nisn || "").toString().trim().toLowerCase() === (username || "").toString().trim().toLowerCase();
+    return (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === (username || "").toString().trim().toLowerCase();
   });
   var actualClass = ((student && (student.kelas || student.tingkat)) || classValue || "").toString().trim().toUpperCase();
   return !!student && assigned.indexOf(actualClass) !== -1;
@@ -897,7 +907,7 @@ function doPost(e) {
 
        for(var i = 0; i < headers.length; i++){
           var h = headers[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-          if(h === "username" || h === "nisn") userCol = i;
+          if(h === "username" || h === "nisn" || h === "nis") userCol = i;
           if(h === "id_materi" || h === "idmateri" || h === "modul") materiCol = i;
           if(h === "nilai" || h === "skor") nilaiCol = i;
           if(h === "waktu" || h === "durasi") waktuCol = i;
@@ -981,7 +991,7 @@ function doPost(e) {
 
          for(var i = 0; i < headers.length; i++){
             var h = headers[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-            if(h === "username" || h === "nisn") userCol = i;
+            if(h === "username" || h === "nisn" || h === "nis") userCol = i;
             if(h === "id_materi" || h === "idmateri" || h === "modul") materiCol = i;
             if(h === "nilai" || h === "skor") nilaiCol = i;
             if(h === "waktu" || h === "durasi") waktuCol = i;

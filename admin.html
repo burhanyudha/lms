@@ -12,6 +12,7 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
   <script src="pwa-handler.js" defer></script>
+  <script src="rekap-match.js"></script>
   <script src="lms-api.js"></script>
 
   <style>
@@ -998,6 +999,7 @@
       if (tabName === 'analisis') {
         populateFilterAnalisis();
       }
+      if (tabName === 'rekap') loadAllData();
     }
 
     // Fungsi getTingkat yang identik dengan dashboard.html
@@ -1091,22 +1093,23 @@
           }
 
           // 4. Filter Nilai, Log Tugas, & Log Login agar hanya menyisakan siswa yang diajar oleh guru
-          const validUsernames = new Set(dataUser.map(u => (getVal(u, ['username', 'nisn']) || "").toString().trim().toLowerCase()));
+          const validUsernames = new Set(dataUser.map(u => (getVal(u, ['username', 'nisn', 'nis']) || "").toString().trim().toLowerCase()));
           const validNames = new Set(dataUser.map(u => (getVal(u, ['nama']) || "").toString().trim().toLowerCase()));
 
           dataNilai = dataNilai.filter(n => {
-             let user = (getVal(n, ['username', 'nisn']) || "").toString().trim().toLowerCase();
+             let user = (getVal(n, ['username', 'nisn', 'nis']) || "").toString().trim().toLowerCase();
              let nama = (getVal(n, ['nama', 'namasiswa']) || "").toString().trim().toLowerCase();
              return validUsernames.has(user) || validNames.has(nama);
           });
 
           dataLogTugas = dataLogTugas.filter(t => {
              let user = (getVal(t, ['username']) || "").toString().trim().toLowerCase();
-             return validUsernames.has(user);
+             let nama = (getVal(t, ['nama', 'namasiswa', 'namalengkap']) || "").toString().trim().toLowerCase();
+             return validUsernames.has(user) || validNames.has(nama);
           });
 
           dataLogLogin = dataLogLogin.filter(l => {
-             let user = (getVal(l, ['username', 'nisn']) || "").toString().trim().toLowerCase();
+             let user = (getVal(l, ['username', 'nisn', 'nis']) || "").toString().trim().toLowerCase();
              return validUsernames.has(user);
           });
         }
@@ -1156,12 +1159,12 @@
     function renderDashboard() {
       // Pastikan memfilter baris yang kosong (Google Sheets sering mengirim baris kosong jika tidak dihapus)
       let validNilai = dataNilai.filter(n => {
-         let u = getVal(n, ['username', 'nisn']) || "";
+         let u = getVal(n, ['username', 'nisn', 'nis']) || "";
          let nm = getVal(n, ['nama', 'namasiswa']) || "";
          return u !== "" || nm !== "";
       });
       let validMateri = dataMateri.filter(m => getVal(m, ['judul', 'materi', 'namamateri']));
-      let validUser = dataUser.filter(u => getVal(u, ['username', 'nisn']));
+      let validUser = dataUser.filter(u => getVal(u, ['username', 'nisn', 'nis']));
 
       document.getElementById('statTotalSiswa').innerText = validUser.length;
       document.getElementById('statTotalMateri').innerText = validMateri.length;
@@ -1581,7 +1584,7 @@
       let q = document.getElementById('searchUser').value.toLowerCase();
       let filtered = dataUser.filter(u => {
         let nama = getVal(u, ['nama', 'namalengkap', 'namasiswa']) || "";
-        let username = getVal(u, ['username', 'nisn']) || "";
+        let username = getVal(u, ['username', 'nisn', 'nis']) || "";
         let text = nama + " " + username;
         return text.toLowerCase().includes(q);
       });
@@ -1595,8 +1598,8 @@
                   valA = (getVal(a, ['nama', 'namalengkap', 'namasiswa']) || "").toLowerCase();
                   valB = (getVal(b, ['nama', 'namalengkap', 'namasiswa']) || "").toLowerCase();
               } else if (sortState.user.col === 'username') {
-                  valA = (getVal(a, ['username', 'nisn']) || "").toLowerCase();
-                  valB = (getVal(b, ['username', 'nisn']) || "").toLowerCase();
+                  valA = (getVal(a, ['username', 'nisn', 'nis']) || "").toLowerCase();
+                  valB = (getVal(b, ['username', 'nisn', 'nis']) || "").toLowerCase();
               } else if (sortState.user.col === 'kelas') {
                   valA = (getVal(a, ['kelas', 'tingkat']) || "").toLowerCase();
                   valB = (getVal(b, ['kelas', 'tingkat']) || "").toLowerCase();
@@ -1610,7 +1613,7 @@
       filtered.forEach((u, index) => {
         let uid = u.rowNumber || (index + 2);
         let nama = getVal(u, ['nama', 'namalengkap', 'namasiswa']) || "-";
-        let username = getVal(u, ['username', 'nisn']) || "-";
+        let username = getVal(u, ['username', 'nisn', 'nis']) || "-";
         let kelas = getVal(u, ['kelas', 'tingkat']) || "-";
         
         html += `<tr>
@@ -1644,7 +1647,7 @@
       document.getElementById('userModalTitle').innerText = "Edit Pengguna";
       document.getElementById('userRowNum').value = u.rowNumber;
       document.getElementById('uNama').value = getVal(u, ['nama', 'namalengkap', 'namasiswa']) || "";
-      document.getElementById('uUsername').value = getVal(u, ['username', 'nisn']) || "";
+      document.getElementById('uUsername').value = getVal(u, ['username', 'nisn', 'nis']) || "";
       document.getElementById('uPassword').value = getVal(u, ['password', 'pass']) || "";
       document.getElementById('uKelas').value = getVal(u, ['kelas', 'rombel']) || "";
       document.getElementById('uTingkat').value = getVal(u, ['tingkat']) || "";
@@ -2017,7 +2020,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         if (selTingkat && selTingkat !== "" && t !== selTingkat) return; // filter tingkat
         if (selKelas && selKelas !== "" && k !== selKelas) return; // filter kelas
         
-        const uname = (getVal(u, ['username', 'nisn']) || "").toString().trim();
+        const uname = (getVal(u, ['username', 'nisn', 'nis']) || "").toString().trim();
         if (uname) {
           userMap.set(uname, {
             username: uname,
@@ -2036,7 +2039,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         let pTipe = getVal(n, ['tipe', 'tipeevaluasi', 'jenis']);
         if (pTipe && pTipe.toString().toLowerCase() === "materi") return; 
 
-        const uname = (getVal(n, ['username', 'nisn']) || "").toString().trim();
+        const uname = (getVal(n, ['username', 'nisn', 'nis']) || "").toString().trim();
         if (!userMap.has(uname)) return; // hanya proses siswa yang sesuai filter
 
         const mid = (getVal(n, ['id_materi', 'idmateri', 'materi', 'modul', 'id']) || "").toString();
@@ -2276,11 +2279,11 @@ window.koreksiTugasAI = async function(rowNumber) {
       let isUploadType = ["tugas"].includes(rawTipe);
 
       let mappedStudents = students.map((u, originalIndex) => {
-        let username = (getVal(u, ['username', 'nisn']) || "").toString().trim();
+        let username = (getVal(u, ['username', 'nisn', 'nis']) || "").toString().trim();
         let nama = getVal(u, ['nama', 'namalengkap', 'namasiswa']) || "-";
 
         let userNilaiData = dataNilai.filter(n => {
-           let nUserRaw = (getVal(n, ['username', 'nisn']) || "").toString().trim();
+           let nUserRaw = (getVal(n, ['username', 'nisn', 'nis']) || "").toString().trim();
            let nNamaRaw = (getVal(n, ['nama', 'namasiswa', 'namalengkap']) || "").toString().trim();
            
            let isUserMatch = (nUserRaw === username) || 
@@ -2671,8 +2674,14 @@ window.koreksiTugasAI = async function(rowNumber) {
     // ============================================
     function populateFilterRekap() {
       let kelasList = [...new Set(dataUser.map(u => (getVal(u, ['kelas', 'tingkat']) || "").toString().trim()))].filter(k => k !== "").sort();
-           let sel = document.getElementById('filterKelasRekap');
-      if (sel) sel.innerHTML = '<option value="">Pilih Kelas</option>' + kelasList.map(k => `<option value="${k}">${k}</option>`).join('');
+      let sel = document.getElementById('filterKelasRekap');
+      if (!sel) return;
+      let selected = sel.value;
+      sel.innerHTML = '<option value="">Pilih Kelas</option>' + kelasList.map(k => `<option value="${k}">${k}</option>`).join('');
+      if (kelasList.includes(selected)) {
+        sel.value = selected;
+        renderRekapAdmin();
+      }
     }
 
     function renderRekapAdmin() {
@@ -2690,6 +2699,7 @@ window.koreksiTugasAI = async function(rowNumber) {
 
       // 1. Ambil Siswa di Kelas Ini
       const students = dataUser.filter(u => norm(getVal(u, ['kelas', 'tingkat'])) === norm(selKelas));
+      const matchesStudentRecord = createRekapRecordMatcher(students);
       
       // 2. Ambil Materi yang Sesuai (Filter by Tingkat, Status Aktif) - DISINKRONKAN DENGAN dashboard.html
       const myTingkat = getTingkatSync({ kelas: selKelas });
@@ -2729,7 +2739,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       students.sort((a, b) => (getVal(a, ['nama']) || "").localeCompare(getVal(b, ['nama']) || ""));
 
       students.forEach(s => {
-        const username = norm(getVal(s, ['username', 'nisn']));
+        const username = norm(getVal(s, ['username', 'nisn', 'nis']));
         const nama = getVal(s, ['nama']) || username;
         
         bodyHtml += `<tr><td style="position: sticky; left: 0; background: #fff; z-index: 9; font-weight: 600; border-right: 2px solid #e2e8f0;">${nama}</td>`;
@@ -2750,18 +2760,16 @@ window.koreksiTugasAI = async function(rowNumber) {
           } else {
             // Cek di logTugas
             const upload = dataLogTugas.find(t => {
-                const tUser = norm(getVal(t, ['username']));
                 const tMid = (getVal(t, ['id_materi', 'materi']) || "").toString().trim();
-                return tUser === username && tMid === mid;
+                return matchesStudentRecord(t, s) && tMid === mid;
             });
 
             const isUploadType = ["praktik", "tugas", "ujian praktik"].includes(tipe);
 
             // Pencocokan Nilai menggunakan mid yang sudah disinkronkan
             const filteredNilai = dataNilai.filter(n => {
-                const nUser = norm(getVal(n, ['username', 'nisn']));
                 const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
-                return nUser === username && nMid === mid;
+                return matchesStudentRecord(n, s) && nMid === mid;
             });
 
             if (filteredNilai.length > 0) {
@@ -2851,6 +2859,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       const students = dataUser
         .filter(u => norm(getVal(u, ['kelas', 'tingkat'])) === norm(selKelas))
         .sort((a, b) => (getVal(a, ['nama']) || "").localeCompare(getVal(b, ['nama']) || ""));
+      const matchesStudentRecord = createRekapRecordMatcher(students);
 
       const myTingkat = getTingkatSync({ kelas: selKelas });
       const selKelasUpper = selKelas.toUpperCase();
@@ -2880,7 +2889,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       const aoa = [header];
 
       students.forEach(s => {
-        const username = norm(getVal(s, ['username', 'nisn']));
+        const username = norm(getVal(s, ['username', 'nisn', 'nis']));
         const nama = getVal(s, ['nama']) || username;
         const row = [nama];
         let totalScore = 0, countScored = 0;
@@ -2896,15 +2905,13 @@ window.koreksiTugasAI = async function(rowNumber) {
           }
 
           const upload = dataLogTugas.find(t => {
-            const tUser = norm(getVal(t, ['username']));
             const tMid = (getVal(t, ['id_materi', 'materi']) || '').toString().trim();
-            return tUser === username && tMid === mid;
+            return matchesStudentRecord(t, s) && tMid === mid;
           });
 
           const filteredNilai = dataNilai.filter(n => {
-            const nUser = norm(getVal(n, ['username', 'nisn']));
             const nMid = (getVal(n, ['id_materi', 'idmateri']) || '').toString().trim();
-            return nUser === username && nMid === mid;
+            return matchesStudentRecord(n, s) && nMid === mid;
           });
 
           if (filteredNilai.length > 0) {

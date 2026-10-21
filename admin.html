@@ -13,7 +13,6 @@
   <link rel="manifest" href="manifest.json">
   <script src="pwa-handler.js" defer></script>
   <script src="rekap-match.js"></script>
-  <script src="ranking-aggregate.js"></script>
   <script src="lms-api.js"></script>
 
   <style>
@@ -2018,7 +2017,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         
         return (!selTingkat || t === selTingkat) && (!selKelas || k === selKelas);
       });
-      const aggregatedData = aggregateRanking(rankingStudents, dataNilai, dataLogTugas).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
+      const aggregatedData = buildRankingData(rankingStudents, dataNilai, dataLogTugas).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
 
       let html = '';
       aggregatedData.forEach((d, i) => {
@@ -2038,6 +2037,34 @@ window.koreksiTugasAI = async function(rowNumber) {
       });
 
       document.getElementById('tabelRankingBody').innerHTML = html || '<tr><td colspan="5" style="text-align:center">Belum ada data peringkat untuk kelas ini.</td></tr>';
+    }
+
+    function buildRankingData(students, scores, tasks) {
+      const norm = value => (value || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const users = new Map(students.map(s => [String(getVal(s, ['username', 'nisn', 'nis']) || '').trim(), {
+        username: String(getVal(s, ['username', 'nisn', 'nis']) || '').trim(), nama: getVal(s, ['nama', 'namalengkap', 'namasiswa']) || '',
+        kelas: getVal(s, ['kelas', 'rombel', 'tingkat']) || '', quizzes: new Map()
+      }]).filter(([username]) => username));
+      const counts = new Map();
+      users.forEach(s => { const key = `${norm(s.nama)}\u0000${norm(s.kelas)}`; if (key !== '\u0000') counts.set(key, (counts.get(key) || 0) + 1); });
+      [...(scores || []), ...(tasks || [])].forEach(record => {
+        const type = (getVal(record, ['tipe', 'tipeevaluasi', 'jenis']) || '').toString().toLowerCase();
+        if (type === 'materi') return;
+        const identity = norm(getVal(record, ['username', 'nisn', 'nis']));
+        let student = [...users.values()].find(s => identity && norm(s.username) === identity);
+        const key = `${norm(getVal(record, ['nama', 'namasiswa', 'namalengkap']))}\u0000${norm(getVal(record, ['kelas', 'tingkat']))}`;
+        if (!student && key !== '\u0000' && counts.get(key) === 1) student = [...users.values()].find(s => `${norm(s.nama)}\u0000${norm(s.kelas)}` === key);
+        const id = (getVal(record, ['id_materi', 'idmateri', 'materi_id']) || '').toString().trim();
+        const value = type === 'survey' && getVal(record, ['nilai', 'skor', 'point']) !== undefined ? 100 : getVal(record, ['nilai', 'skor', 'point']);
+        if (!student || !id || value == null || value.toString().trim() === '' || /terkirim/i.test(value.toString())) return;
+        const score = parseInt(value, 10); if (Number.isNaN(score)) return;
+        const time = parseTimeToSeconds(getVal(record, ['waktu', 'timestamp']));
+        const old = student.quizzes.get(id);
+        if (!old || score > old.score || (score === old.score && time < old.waktuSec)) student.quizzes.set(id, {score, waktuSec: time});
+      });
+      return [...users.values()].filter(s => s.quizzes.size).map(s => ({username: s.username, nama: s.nama, kelas: s.kelas,
+        nilai: [...s.quizzes.values()].reduce((sum, q) => sum + q.score, 0), waktuSec: [...s.quizzes.values()].reduce((sum, q) => sum + q.waktuSec, 0)
+      })).sort((a, b) => b.nilai - a.nilai || a.waktuSec - b.waktuSec);
     }
 
     // ============================================

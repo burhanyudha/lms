@@ -12,7 +12,6 @@
   <!-- PWA Handler -->
   <script src="pwa-handler.js"></script>
   <script src="lms-api.js"></script>
-  <script src="ranking-aggregate.js"></script>
 
   <style>
     :root {
@@ -1276,6 +1275,34 @@
       return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
     }
 
+    function buildRankingData(students, scores, tasks) {
+      const norm = value => (value || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const users = new Map(students.map(s => [String(s.username || s.nisn || s.nis || '').trim(), {
+        username: String(s.username || s.nisn || s.nis || '').trim(), nama: s.nama || s.namalengkap || s.namasiswa || '',
+        kelas: s.kelas || s.tingkat || '', quizzes: new Map()
+      }]).filter(([username]) => username));
+      const counts = new Map();
+      users.forEach(s => { const key = `${norm(s.nama)}\u0000${norm(s.kelas)}`; if (key !== '\u0000') counts.set(key, (counts.get(key) || 0) + 1); });
+      [...(scores || []), ...(tasks || [])].forEach(record => {
+        const type = (record.tipe || record.tipeevaluasi || record.jenis || '').toString().toLowerCase();
+        if (type === 'materi') return;
+        const identity = norm(record.username || record.nisn || record.nis);
+        let student = [...users.values()].find(s => identity && norm(s.username) === identity);
+        const key = `${norm(record.nama || record.namasiswa || record.namalengkap)}\u0000${norm(record.kelas || record.tingkat)}`;
+        if (!student && key !== '\u0000' && counts.get(key) === 1) student = [...users.values()].find(s => `${norm(s.nama)}\u0000${norm(s.kelas)}` === key);
+        const id = (record.id_materi || record.idmateri || record.materi_id || '').toString().trim();
+        const rawScore = type === 'survey' && (record.nilai ?? record.skor ?? record.point) !== undefined ? 100 : record.nilai ?? record.skor ?? record.point;
+        if (!student || !id || rawScore == null || rawScore.toString().trim() === '' || /terkirim/i.test(rawScore.toString())) return;
+        const score = Number.parseInt(rawScore, 10); if (Number.isNaN(score)) return;
+        const waktuSec = parseTimeToSeconds(record.waktu);
+        const old = student.quizzes.get(id);
+        if (!old || score > old.score || (score === old.score && waktuSec < old.waktuSec)) student.quizzes.set(id, {score, waktuSec});
+      });
+      return [...users.values()].filter(s => s.quizzes.size).map(s => ({username: s.username, nama: s.nama, kelas: s.kelas,
+        nilai: [...s.quizzes.values()].reduce((sum, q) => sum + q.score, 0), waktuSec: [...s.quizzes.values()].reduce((sum, q) => sum + q.waktuSec, 0)
+      })).sort((a, b) => b.nilai - a.nilai || a.waktuSec - b.waktuSec);
+    }
+
     function renderRanking(rawNilai, dataUser, dataLogTugas = []) {
       const fullList = document.getElementById("rankingList");
       const homeList = document.getElementById("homeRankingList");
@@ -1284,7 +1311,7 @@
 
         const myTingkat = getTingkat(user);
         const rankingStudents = dataUser.filter(student => getTingkat(student) === myTingkat);
-        const aggregatedData = aggregateRanking(rankingStudents, rawNilai, dataLogTugas).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
+        const aggregatedData = buildRankingData(rankingStudents, rawNilai, dataLogTugas).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
         const kelasSet = new Set(aggregatedData.map(row => row.kelas).filter(Boolean));
 
         globalRankingData = aggregatedData;

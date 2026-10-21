@@ -12,6 +12,7 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <link rel="manifest" href="manifest.json">
   <script src="pwa-handler.js" defer></script>
+  <script src="lms-api.js"></script>
 
   <style>
     :root {
@@ -815,22 +816,23 @@
 
   <script>
     // ===== CEK LOGIN ADMIN =====
-    let IS_SUPER_ADMIN = true;
+    let IS_SUPER_ADMIN = false;
     let MY_MAPEL = "";
     let MY_KELAS = [];
 
     const adminSession = localStorage.getItem("admin_user");
+    const adminData = JSON.parse(adminSession || "{}");
+    const IS_SUPER_ADMIN = ["admin", "administrator", "superadmin"].includes((adminData.role || "").toString().toLowerCase().replace(/[^a-z0-9]/g, ""));
     if (!adminSession) {
         window.location.href = "login-admin.html";
     } else {
         try {
-            const adminData = JSON.parse(adminSession);
             document.getElementById('admin-name').innerText = adminData.nama || adminData.username || "Admin";
             document.getElementById('avatar-toggle').innerText = (adminData.nama || adminData.username || "A").charAt(0).toUpperCase();
             
             // Tentukan role & mapel/kelas yang diampu
             const role = (adminData.role || "").toString().toLowerCase();
-            IS_SUPER_ADMIN = (role === "superadmin" || role === "administrator");
+            IS_SUPER_ADMIN = (role === "superadmin" || role === "administrator" || role === "admin");
             MY_MAPEL = (adminData.mapel || "").toString().trim();
             const kelasRaw = (adminData.kelas || "").toString().trim();
             MY_KELAS = kelasRaw ? kelasRaw.split(',').map(k => k.trim().toUpperCase()) : [];
@@ -1022,7 +1024,15 @@
     // ============================================
     // FETCH DATA
     // ============================================
-    window.onload = () => { loadAllData(); };
+    window.onload = async () => {
+      const session = await lmsApi.validateSession().catch(() => null);
+      if (!session || session.status !== "success") {
+        localStorage.removeItem("admin_user");
+        window.location.href = "login-admin.html";
+        return;
+      }
+      loadAllData();
+    };
 
     async function loadAllData() {
       showOverlay("Mengambil data dari Spreadsheet...");
@@ -1329,9 +1339,6 @@
               } else if (sortState.materi.col === 'id') {
                   valA = (getVal(a, ['idmateri', 'id_materi', 'materiid']) || "").toLowerCase();
                   valB = (getVal(b, ['idmateri', 'id_materi', 'materiid']) || "").toLowerCase();
-                  // Jika ID manual kosong, bandingkan rowNumber
-                  if(!valA) valA = a.rowNumber.toString().padStart(5, '0');
-                  if(!valB) valB = b.rowNumber.toString().padStart(5, '0');
               }
               if (valA < valB) return sortState.materi.asc ? -1 : 1;
               if (valA > valB) return sortState.materi.asc ? 1 : -1;
@@ -1340,7 +1347,6 @@
       }
 
       filtered.forEach((m, index) => {
-        let mid = m.rowNumber || (index + 2); // default fallback to index+2 (since row 1 is header)
         let statusStr = getVal(m, ['status']) || "";
         let isDraft = statusStr.toString().toLowerCase() === "draft";
         
@@ -1349,14 +1355,8 @@
         let tipe = getVal(m, ['tipe', 'tipeevaluasi', 'tipe_evaluasi']) || "Praktik";
         let kelas = getVal(m, ['kelas', 'tingkat']) || "SEMUA";
 
-        // Hitung ID Modul Relatif per Tingkat
-        let mTingkat = getTingkatSync(m);
-        let idTingkat = 0;
-        const materiTingkatSama = dataMateri.filter(item => getTingkatSync(item) === mTingkat);
-        idTingkat = materiTingkatSama.indexOf(m) + 1;
-        
-        let midManual = getVal(m, ['idmateri', 'id_materi', 'materiid']);
-        let displayId = midManual || (mTingkat === "SEMUA" ? "Global" : idTingkat);
+        let midManual = getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']);
+        let displayId = midManual || "ID belum diisi";
         
         // Cari index asli di dataMateri untuk fungsi Edit
         const realIdx = dataMateri.findIndex(item => item.rowNumber === m.rowNumber);
@@ -1423,41 +1423,15 @@
         newOrder.push(parseInt(tr.getAttribute('data-rownum')));
       });
 
-      if (newOrder.length === 0) return;
-
-      showOverlay("Menyimpan urutan materi...");
-      try {
-        let payload = {
-          action: "reorderData",
-          sheetName: "materi",
-          newOrder: newOrder
-        };
-
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-        });
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-          alert("Urutan berhasil disimpan!");
-          document.getElementById('btnSaveOrder').style.display = 'none';
-          loadAllData(); // Reload data dari server
-        } else {
-          alert("Gagal: " + result.message);
-        }
-      } catch (e) {
-        console.error(e);
-        alert("Terjadi kesalahan koneksi.");
-      }
-      hideOverlay();
+      if (newOrder.length) alert("Urutan tampilan belum dapat disimpan ke Spreadsheet.");
+      document.getElementById('btnSaveOrder').style.display = 'none';
     }
 
     function openModalMateri() {
       document.getElementById('materiModalTitle').innerText = "Tambah Materi Baru";
       document.getElementById('materiRowNum').value = "";
       document.getElementById('oldMId').value = "";
+      document.getElementById('mId').readOnly = false;
       document.getElementById('mId').value = "";
       document.getElementById('mJudul').value = "";
       document.getElementById('mDeskripsi').value = "";
@@ -1502,6 +1476,7 @@
       
       const mid = getVal(m, ['idmateri', 'id_materi', 'materiid', 'id']) || "";
       document.getElementById('mId').value = mid;
+      document.getElementById('mId').readOnly = true;
       document.getElementById('oldMId').value = mid;
 
       document.getElementById('mJudul').value = getVal(m, ['judul', 'materi', 'namamateri']) || "";
@@ -1533,6 +1508,9 @@
       let rowNum = document.getElementById('materiRowNum').value;
       let oldId = document.getElementById('oldMId').value;
       let newId = document.getElementById('mId').value;
+      if (rowNum && oldId && newId.trim().toLowerCase() !== oldId.trim().toLowerCase()) {
+        return alert("ID Materi bersifat permanen dan tidak dapat diubah.");
+      }
       
       let judulVal = document.getElementById('mJudul').value;
       let descVal = document.getElementById('mDeskripsi').value;
@@ -1564,18 +1542,7 @@
       
       closeModal('materiModal');
 
-      if (rowNum && (newId !== oldId)) {
-        await postData({ 
-          action: "updateMateriId", 
-          rowNumber: rowNum, 
-          oldId: oldId, 
-          newId: newId, 
-          tingkat: kelasVal,
-          data: JSON.stringify(data) 
-        });
-      } else {
-        await postData({ action: "saveData", sheet: "materi", rowNumber: rowNum, data: JSON.stringify(data) });
-      }
+      await postData({ action: "saveData", sheet: "materi", rowNumber: rowNum, data: JSON.stringify(data) });
     }
 
     async function toggleMateriStatus(rowNum) {
@@ -2301,14 +2268,10 @@ window.koreksiTugasAI = async function(rowNumber) {
          return (kelas || "").toString().trim() === selKelas.toString().trim();
       });
       
-      let selMateriOption = document.getElementById('filterMateriNilai').options[document.getElementById('filterMateriNilai').selectedIndex];
-      let selMateriJudul = selMateriOption ? selMateriOption.text.toString().trim() : "";
-
       let mObj = dataMateri.find(m => {
           let mId = (getVal(m, ['id', 'id_materi', 'idmateri', 'materiid']) || "").toString().trim();
           return mId === selMateri.toString().trim();
       });
-      let mJudulClean = mObj ? norm(getVal(mObj, ['judul', 'materi'])) : "";
       let rawTipe = mObj ? (getVal(mObj, ['tipeevaluasi', 'tipe_evaluasi', 'tipe']) || "Praktik").toLowerCase() : "praktik";
       let isUploadType = ["tugas"].includes(rawTipe);
 
@@ -2325,11 +2288,7 @@ window.koreksiTugasAI = async function(rowNumber) {
                              (nUserRaw !== "" && nUserRaw.toLowerCase() === nama.toString().trim().toLowerCase());
                              
            let nMatRaw = (getVal(n, ['id_materi', 'idmateri', 'modul']) || "").toString().trim();
-           let nMatJudulRaw = (getVal(n, ['judul', 'materi', 'judulkuis', 'namamateri']) || "").toString().trim();
-           
-           let isMateriMatch = (nMatRaw === selMateri.toString().trim()) || 
-                               (nMatRaw !== "" && nMatRaw.toLowerCase() === selMateriJudul.toLowerCase()) ||
-                               (nMatJudulRaw !== "" && nMatJudulRaw.toLowerCase() === selMateriJudul.toLowerCase());
+           let isMateriMatch = nMatRaw === selMateri.toString().trim();
                                
            return isUserMatch && isMateriMatch;
         });
@@ -2367,8 +2326,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         let upload = dataLogTugas.find(t => {
             let tUser = norm(getVal(t, ['username']));
             let tMid = (getVal(t, ['id_materi', 'materi']) || "").toString().trim();
-            let tJudul = norm(getVal(t, ['materi', 'judul']));
-            return tUser === norm(username) && (tMid === selMateri.toString().trim() || (mJudulClean !== "" && tJudul === mJudulClean));
+            return tUser === norm(username) && tMid === selMateri.toString().trim();
         });
 
         return { u, username, nama, maxNilai, statusKuis: maxNilai !== "" ? "Tuntas" : "Belum", waktuSubmit, durasiKuis, rawDate, upload, isUploadType };
@@ -2632,11 +2590,11 @@ window.koreksiTugasAI = async function(rowNumber) {
       const myTingkat = getTingkatSync(m);
       
       // Gunakan ID Manual jika ada, jika tidak pakai urutan otomatis (fallback)
-      const midManual = getVal(m, ['idmateri', 'id_materi', 'materiid']);
-      const materialsForThisTingkat = dataMateri.filter(item => getTingkatSync(item) === myTingkat || getTingkatSync(item) === "SEMUA");
-      const autoMid = (materialsForThisTingkat.indexOf(m) + 1).toString();
-      
-      const targetMid = midManual || autoMid;
+      const targetMid = (getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']) || '').toString().trim();
+      if (!targetMid) {
+        alert('Materi ini belum memiliki id_materi permanen. Isi ID sebelum mengelola soalnya.');
+        return;
+      }
       
       title.innerText = `Preview Soal: ${judul}`;
       content.innerHTML = '<div style="text-align:center; padding:40px;"><i data-lucide="refresh-cw" class="spin-anim" style="width:30px; height:30px; color:var(--primary); margin-bottom:10px;"></i><p>Mencari soal di database...</p></div>';
@@ -2738,6 +2696,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       const selKelasUpper = selKelas.toUpperCase();
 
       const materials = dataMateri.filter(m => {
+        if (!(getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']) || '').toString().trim()) return false;
         const mStatus = (getVal(m, ['status']) || "Aktif").toString().toLowerCase();
         if (mStatus !== "aktif") return false;
 
@@ -2778,9 +2737,8 @@ window.koreksiTugasAI = async function(rowNumber) {
         let totalScore = 0;
         let countScored = 0;
 
-        materials.forEach((m, idx) => {
-          // PENTING: Sisi siswa menghitung ID dari index materi yang SUDAH DIFILTER per tingkat ATAU idmateri eksplisit
-          const mid = (getVal(m, ['idmateri', 'id_materi', 'materiid']) || (idx + 1)).toString();
+        materials.forEach(m => {
+          const mid = getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']).toString().trim();
           const mJudul = norm(getVal(m, ['judul', 'materi']));
           const tipe = (getVal(m, ['tipeevaluasi', 'tipe_evaluasi', 'tipe']) || "Praktik").toLowerCase();
           
@@ -2794,8 +2752,7 @@ window.koreksiTugasAI = async function(rowNumber) {
             const upload = dataLogTugas.find(t => {
                 const tUser = norm(getVal(t, ['username']));
                 const tMid = (getVal(t, ['id_materi', 'materi']) || "").toString().trim();
-                const tJudul = norm(getVal(t, ['materi', 'judul']));
-                return tUser === username && (tMid === mid || (mJudul !== "" && tJudul === mJudul));
+                return tUser === username && tMid === mid;
             });
 
             const isUploadType = ["praktik", "tugas", "ujian praktik"].includes(tipe);
@@ -2804,9 +2761,7 @@ window.koreksiTugasAI = async function(rowNumber) {
             const filteredNilai = dataNilai.filter(n => {
                 const nUser = norm(getVal(n, ['username', 'nisn']));
                 const nMid = (getVal(n, ['id_materi', 'idmateri']) || "").toString().trim();
-                const nJudul = norm(getVal(n, ['judul', 'materi', 'judul_materi']));
-                
-                return nUser === username && (nMid === mid || (mJudul !== "" && nJudul === mJudul));
+                return nUser === username && nMid === mid;
             });
 
             if (filteredNilai.length > 0) {
@@ -2901,6 +2856,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       const selKelasUpper = selKelas.toUpperCase();
 
       const materials = dataMateri.filter(m => {
+        if (!(getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']) || '').toString().trim()) return false;
         const mStatus = (getVal(m, ['status']) || "Aktif").toString().toLowerCase();
         if (mStatus !== "aktif") return false;
 
@@ -2929,8 +2885,8 @@ window.koreksiTugasAI = async function(rowNumber) {
         const row = [nama];
         let totalScore = 0, countScored = 0;
 
-        materials.forEach((m, idx) => {
-          const mid = (getVal(m, ['idmateri', 'id_materi', 'materiid']) || (idx + 1)).toString();
+        materials.forEach(m => {
+          const mid = getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']).toString().trim();
           const mJudul = norm(getVal(m, ['judul', 'materi']));
           const tipe = (getVal(m, ['tipeevaluasi', 'tipe_evaluasi', 'tipe']) || 'Praktik').toLowerCase();
 
@@ -2942,15 +2898,13 @@ window.koreksiTugasAI = async function(rowNumber) {
           const upload = dataLogTugas.find(t => {
             const tUser = norm(getVal(t, ['username']));
             const tMid = (getVal(t, ['id_materi', 'materi']) || '').toString().trim();
-            const tJudul = norm(getVal(t, ['materi', 'judul']));
-            return tUser === username && (tMid === mid || (mJudul !== '' && tJudul === mJudul));
+            return tUser === username && tMid === mid;
           });
 
           const filteredNilai = dataNilai.filter(n => {
             const nUser = norm(getVal(n, ['username', 'nisn']));
             const nMid = (getVal(n, ['id_materi', 'idmateri']) || '').toString().trim();
-            const nJudul = norm(getVal(n, ['judul', 'materi', 'judul_materi']));
-            return nUser === username && (nMid === mid || (mJudul !== '' && nJudul === mJudul));
+            return nUser === username && nMid === mid;
           });
 
           if (filteredNilai.length > 0) {

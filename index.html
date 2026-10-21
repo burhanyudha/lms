@@ -12,6 +12,7 @@
     <link rel="manifest" href="manifest.json">
     <!-- PWA Handler -->
     <script src="pwa-handler.js"></script>
+    <script src="lms-api.js"></script>
 
     <style>
         :root {
@@ -538,7 +539,7 @@
                     </div>
                 </div>
                 <div class="loading-text">
-                    Menyiapkan Kelas<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+                    Menyiapkan Login<span class="dots"><span>.</span><span>.</span><span>.</span></span>
                 </div>
                 <div class="loading-progress-bar">
                     <div class="loading-progress-fill"></div>
@@ -548,22 +549,10 @@
 
             <div id="login-form" style="display: none;">
                 <div class="form-group">
-                    <label class="form-label">Kelas</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-users" id="kelas-icon"></i>
-                        <select id="kelas" onchange="handleKelasChange()">
-                            <option value="">-- Pilih Kelas --</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Nama Lengkap</label>
+                    <label class="form-label">Username</label>
                     <div class="input-wrapper">
                         <i class="fas fa-user"></i>
-                        <select id="nama" disabled>
-                            <option value="">Pilih kelas terlebih dahulu</option>
-                        </select>
+                        <input type="text" id="username" placeholder="Username akun LMS" autocomplete="username">
                     </div>
                 </div>
 
@@ -602,107 +591,29 @@
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbz8Q_B9ky4B_rEctis6YtBwqsbgzJyrt7-lsHg-TnuQTcxsaGB8Y8-9s3CFTXtS3LSs/exec";
 
-        let allUsers = [];
-
         window.onload = async () => {
-            // Check if already logged in
             const session = localStorage.getItem("user");
             if (session) {
-                window.location.href = "dashboard.html";
-                return;
-            }
-
-            const syncStatus = document.getElementById("syncStatus");
-            const cachedUser = localStorage.getItem("cache_user");
-            if (cachedUser) {
-                try {
-                    allUsers = JSON.parse(cachedUser);
-                    renderKelasDropdown(allUsers);
-                    syncStatus.style.display = "flex";
-                } catch (e) {}
-            }
-
-            try {
-                const res = await fetch(API_URL + "?sheet=user");
-                const freshUsers = await res.json();
-                allUsers = freshUsers;
-                localStorage.setItem("cache_user", JSON.stringify(allUsers));
-                
-                // If there was no cache, render immediately after fetch
-                // If there was cache, data is already rendered, just update memory for login
-                if (!cachedUser) {
-                    renderKelasDropdown(allUsers);
-                } else {
-                    // Update dropdown in background just in case new classes were added
-                    const currentKelas = document.getElementById('kelas').value;
-                    renderKelasDropdown(allUsers);
-                    document.getElementById('kelas').value = currentKelas;
-
-                    syncStatus.innerHTML = `<i class="fas fa-check-circle" style="color: #10b981;"></i> <span>Data kelas terbaru!</span>`;
-                    setTimeout(() => { syncStatus.style.display = "none"; }, 3000);
+                const result = await lmsApi.validateSession().catch(() => null);
+                if (result && result.status === "success") {
+                    window.location.href = "dashboard.html";
+                    return;
                 }
-            } catch (e) {
-                if (!cachedUser) {
-                    document.getElementById('loading-overlay').innerHTML = `
-                        <i class="fas fa-exclamation-triangle" style="font-size: 48px; color: #e11d48; margin-bottom: 20px;"></i>
-                        <p style="color: #e11d48; font-size: 15px; font-weight: 500;">Gagal memuat data kelas</p>
-                        <p style="color: var(--slate-500); font-size: 13px; margin-top: 8px;">Silakan muat ulang halaman ini</p>
-                    `;
-                } else {
-                    syncStatus.innerHTML = `<i class="fas fa-wifi" style="color: #ef4444;"></i> <span style="color: #ef4444;">Mode Offline (Gagal Sinkron)</span>`;
-                    setTimeout(() => { syncStatus.style.display = "none"; }, 4000);
-                }
-                console.error("Gagal memuat data user", e);
+                localStorage.removeItem("user");
             }
-        };
-
-        function renderKelasDropdown(users) {
-            const kelasSet = new Set();
-            users.forEach(u => {
-                if (u.kelas) kelasSet.add(u.kelas);
-            });
-            const kelasArray = Array.from(kelasSet).sort();
-
-            const kelasSelect = document.getElementById('kelas');
-            kelasSelect.innerHTML = '<option value="">-- Pilih Kelas --</option>'; // Reset options
-            kelasArray.forEach(k => {
-                kelasSelect.innerHTML += `<option value="${k}">${k}</option>`;
-            });
-
             document.getElementById('loading-overlay').style.display = 'none';
             document.getElementById('login-form').style.display = 'block';
-        }
-
-        function handleKelasChange() {
-            const selectedKelas = document.getElementById('kelas').value;
-            const namaSelect = document.getElementById('nama');
-
-            if (!selectedKelas) {
-                namaSelect.innerHTML = '<option value="">Pilih kelas terlebih dahulu</option>';
-                namaSelect.disabled = true;
-                return;
-            }
-
-            const filteredUsers = allUsers.filter(u => u.kelas === selectedKelas);
-            filteredUsers.sort((a, b) => a.nama.localeCompare(b.nama));
-
-            namaSelect.innerHTML = '<option value="">-- Pilih Nama --</option>';
-            filteredUsers.forEach(u => {
-                namaSelect.innerHTML += `<option value="${u.nama}">${u.nama}</option>`;
-            });
-            namaSelect.disabled = false;
-        }
+        };
 
         async function handleLogin() {
-            const kelas = document.getElementById("kelas").value;
-            const nama = document.getElementById("nama").value;
+            const username = document.getElementById("username").value.trim();
             const password = document.getElementById("password").value.trim();
             const btnText = document.getElementById("btn-text");
             const loader = document.getElementById("loader");
             const errorDiv = document.getElementById("error-msg");
 
-            if (!kelas || !nama || !password) {
-                updateMsg("Mohon pilih kelas, nama, dan isi password", "#e11d48", "exclamation-circle");
+            if (!username || !password) {
+                updateMsg("Username dan password wajib diisi", "#e11d48", "exclamation-circle");
                 return;
             }
 
@@ -712,51 +623,17 @@
             document.getElementById("btn-login").disabled = true;
 
             try {
-                const user = allUsers.find(u =>
-                    u.kelas === kelas &&
-                    u.nama === nama &&
-                    u.password.toString().trim() === password
-                );
-
-                if (user) {
-                    user.username = user.username || user.nisn || user.nis || user.nama || "-";
-                    // Standarisasi properti tingkat
-                    user.tingkat = user.tingkat || user.Tingkat || "";
-                    if (!user.tingkat || (user.tingkat === "X" && user.kelas && (user.kelas.toUpperCase().startsWith("XI") || user.kelas.toUpperCase().startsWith("XII")))) {
-                        const k = (user.kelas || "").toString().trim().toUpperCase();
-                        if (k.startsWith("XII")) user.tingkat = "XII";
-                        else if (k.startsWith("XI")) user.tingkat = "XI";
-                        else if (k.startsWith("X")) user.tingkat = "X";
-                        else user.tingkat = "X";
-                    }
-                    if (!user.tingkat) user.tingkat = "X";
-
-                    // Record login activity
-                    try {
-                        const now = new Date();
-                        const timeStr = now.toISOString();
-                        fetch(API_URL, {
-                            method: "POST",
-                            body: JSON.stringify({
-                                action: "saveLogin",
-                                data: {
-                                    username: user.username || user.nisn || "-",
-                                    nama: user.nama,
-                                    kelas: user.kelas,
-                                    status: "Sukses",
-                                    waktu: timeStr
-                                }
-                            }),
-                            mode: "no-cors"
-                        });
-                    } catch(e) {}
-
+                const result = await lmsApi.login("login", username, password);
+                if (result.status === "success") {
+                    const user = result.user;
+                    user.tingkat = user.tingkat || (user.kelas || "X").toString().trim().toUpperCase().match(/^(XII|XI|X)/)?.[0] || "X";
                     updateMsg("Berhasil! Mengalihkan...", "#059669", "check-circle");
                     localStorage.removeItem("cache_materi");
                     localStorage.removeItem("cache_listNilai");
                     localStorage.removeItem("cache_logTugas");
+                    localStorage.removeItem("cache_user");
                     localStorage.removeItem("cache_lastUpdated");
-                    localStorage.setItem("user", JSON.stringify(user));
+                    localStorage.setItem("user", JSON.stringify({...user, token: result.token}));
                     setTimeout(() => {
                         window.location.href = "dashboard.html";
                     }, 1000);
@@ -764,7 +641,7 @@
                     loader.style.display = "none";
                     btnText.innerText = "Masuk Sekarang";
                     document.getElementById("btn-login").disabled = false;
-                    updateMsg("Password salah", "#e11d48", "times-circle");
+                    updateMsg(result.message || "Username atau password salah", "#e11d48", "times-circle");
                 }
             } catch (e) {
                 loader.style.display = "none";

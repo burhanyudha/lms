@@ -10,6 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <!-- PWA Handler -->
   <script src="pwa-handler.js"></script>
+  <script src="lms-api.js"></script>
 
   <style>
     :root {
@@ -219,16 +220,6 @@
     try {
       const res = await fetch(API_URL);
       data = await res.json();
-    } catch (fetchErr) {
-      console.warn("Gagal fetch live materi, menggunakan cache lokal:", fetchErr);
-      const cached = localStorage.getItem("cache_materi");
-      if (cached) {
-         data = JSON.parse(cached);
-      } else {
-         throw fetchErr; // Jika tidak ada cache sama sekali, lempar error asli
-      }
-    }
-    try {
       const getVal = (obj, possibleKeys) => {
           for (const key in obj) {
               const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -242,7 +233,7 @@
       const midTarget = getParam("id");
 
       let m = data.find(item => {
-          let mid = (getVal(item, ['id_materi', 'idmateri', 'id']) || item.rowNumber).toString().trim().toLowerCase();
+          let mid = (getVal(item, ['id_materi', 'idmateri', 'materiid', 'id']) || '').toString().trim().toLowerCase();
           return mid === (midTarget || "").toString().trim().toLowerCase();
       });
 

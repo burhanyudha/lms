@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="manifest" href="manifest.json">
     <script src="pwa-handler.js" defer></script>
+    <script src="lms-api.js"></script>
 
     <style>
         :root {
@@ -328,31 +329,18 @@
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbz8Q_B9ky4B_rEctis6YtBwqsbgzJyrt7-lsHg-TnuQTcxsaGB8Y8-9s3CFTXtS3LSs/exec";
-        let allAdmins = [];
-
         window.onload = async () => {
-            // Cek jika sudah login, langsung alihkan
             const session = localStorage.getItem("admin_user");
             if (session) {
-                window.location.href = "admin.html";
-                return;
+                const result = await lmsApi.validateSession().catch(() => null);
+                if (result && result.status === "success") {
+                    window.location.href = "admin.html";
+                    return;
+                }
+                localStorage.removeItem("admin_user");
             }
-
             const syncStatus = document.getElementById("syncStatus");
-            syncStatus.style.display = "flex";
-
-            try {
-                // Ambil data dari sheet khusus admin
-                const res = await fetch(API_URL + "?sheet=admin");
-                allAdmins = await res.json();
-                
-                syncStatus.innerHTML = `<i class="fas fa-check-circle" style="color: #10b981;"></i> <span>Koneksi terhubung, sistem siap digunakan.</span>`;
-                setTimeout(() => { syncStatus.style.display = "none"; }, 2000);
-            } catch (e) {
-                console.error("Gagal memuat data admin", e);
-                syncStatus.innerHTML = `<i class="fas fa-wifi" style="color: #ef4444;"></i> <span style="color: #ef4444;">Sistem offline.</span>`;
-                updateMsg("Sistem offline. Pastikan koneksi internet stabil.", "#e11d48", "wifi");
-            }
+            syncStatus.style.display = "none";
         };
 
         async function handleLogin() {
@@ -368,52 +356,16 @@
                 return;
             }
 
-            if (allAdmins.length === 0) {
-                updateMsg("Data admin sedang dimuat atau kosong.", "#e11d48", "hourglass-half");
-                // Coba ambil ulang jika kosong
-                try {
-                    const res = await fetch(API_URL + "?sheet=admin");
-                    allAdmins = await res.json();
-                } catch(e) {}
-                
-                if (allAdmins.length === 0) return;
-            }
-
             loader.style.display = "block";
             btnText.innerText = "Memverifikasi...";
             errorDiv.innerHTML = "";
             btn.disabled = true;
 
             try {
-                // Cek kecocokan kredensial
-                const admin = allAdmins.find(u =>
-                    (u.username && u.username.toString().trim() === usernameInput) &&
-                    (u.password && u.password.toString().trim() === passwordInput)
-                );
-
-                if (admin) {
+                const result = await lmsApi.login("loginAdmin", usernameInput, passwordInput);
+                if (result.status === "success") {
                     updateMsg("Berhasil login! Mengalihkan...", "#059669", "check-circle");
-                    localStorage.setItem("admin_user", JSON.stringify(admin));
-                    
-                    // Catat log login admin (opsional)
-                    try {
-                        const now = new Date();
-                        fetch(API_URL, {
-                            method: "POST",
-                            body: JSON.stringify({
-                                action: "saveLogin",
-                                data: {
-                                    username: admin.username,
-                                    nama: admin.nama || "Admin",
-                                    kelas: "ADMIN",
-                                    status: "Sukses Login Panel",
-                                    waktu: now.toISOString()
-                                }
-                            }),
-                            mode: "no-cors"
-                        });
-                    } catch(e) {}
-
+                    localStorage.setItem("admin_user", JSON.stringify({...result.user, token: result.token}));
                     setTimeout(() => {
                         window.location.href = "admin.html";
                     }, 1000);
@@ -421,7 +373,7 @@
                     loader.style.display = "none";
                     btnText.innerText = "Masuk Sebagai Admin";
                     btn.disabled = false;
-                    updateMsg("Username atau Password salah", "#e11d48", "times-circle");
+                    updateMsg(result.message || "Username atau password salah", "#e11d48", "times-circle");
                 }
             } catch (e) {
                 loader.style.display = "none";

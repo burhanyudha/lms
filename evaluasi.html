@@ -122,6 +122,7 @@
         </div>
     </div>
 
+    <script src="lms-api.js"></script>
     <script>
         const userDataForAPI = JSON.parse(localStorage.getItem('user') || '{}');
         const myTingkatAPI = (userDataForAPI.tingkat || userDataForAPI.Tingkat || "X").toString().trim().toUpperCase();
@@ -137,6 +138,7 @@
         let currentIndex = 0;
         let userAnswers = [];
         let timerInterval;
+        let timerSyncInterval;
         let elapsedSeconds = 0;
         const API_BASE = "https://script.google.com/macros/s/AKfycbz8Q_B9ky4B_rEctis6YtBwqsbgzJyrt7-lsHg-TnuQTcxsaGB8Y8-9s3CFTXtS3LSs/exec";
 
@@ -281,8 +283,7 @@
                     opsi_b: getVal(q, ['opsib', 'pilihanb', 'b']),
                     opsi_c: getVal(q, ['opsic', 'pilihanc', 'c']),
                     opsi_d: getVal(q, ['opsid', 'pilihand', 'd']),
-                    opsi_e: getVal(q, ['opsie', 'pilihane', 'e']),
-                    kunci: getVal(q, ['kunci', 'jawaban', 'kuncijawaban'])
+                    opsi_e: getVal(q, ['opsie', 'pilihane', 'e'])
                 }));
 
                 // Pra-proses opsi agar bisa diacak per soal
@@ -493,7 +494,7 @@
             }, 1000);
 
             // Sync ke Server setiap 10 detik
-            setInterval(() => {
+            timerSyncInterval = setInterval(() => {
                 fetch(API_BASE, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -508,20 +509,13 @@
 
         async function finishQuiz() {
             clearInterval(timerInterval);
+            clearInterval(timerSyncInterval);
             const btn = document.getElementById('next-btn');
             btn.innerText = "Menyimpan Data...";
             btn.disabled = true;
             btn.classList.add("opacity-75", "cursor-wait");
 
-            let realScore = 0;
-            let correct = 0;
-            userAnswers.forEach((ans, i) => {
-                if(ans && ans === allQuestions[i].kunci.toUpperCase()) correct++;
-            });
-            realScore = Math.round((correct / allQuestions.length) * 100);
-
-            // Simpan nilai asli ke database, tapi Rekap Nilai dan Ranking akan membacanya sebagai 100
-            let score = realScore;
+            let score = 0;
             
             const m = Math.floor(elapsedSeconds / 60).toString().padStart(2, '0');
             const s = (elapsedSeconds % 60).toString().padStart(2, '0');
@@ -558,15 +552,23 @@
             };
 
             try {
-                await fetch(API_BASE, {
+                const response = await fetch(API_BASE, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'text/plain;charset=utf-8',
                     },
                     body: JSON.stringify(payload)
                 });
+                const saved = await response.json();
+                if (saved.status !== "success") throw new Error(saved.message || "Nilai tidak berhasil disimpan.");
+                score = Number(saved.nilai) || 0;
             } catch(e) {
                 console.error("Gagal mengirim data:", e);
+                btn.disabled = false;
+                btn.classList.remove("opacity-75", "cursor-wait");
+                btn.innerText = "Coba Simpan Lagi";
+                alert(e.message || "Nilai gagal disimpan. Periksa koneksi lalu coba lagi.");
+                return;
             }
             
             // Sembunyikan antarmuka kuis

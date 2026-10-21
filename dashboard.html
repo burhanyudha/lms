@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <!-- PWA Handler -->
   <script src="pwa-handler.js"></script>
+  <script src="lms-api.js"></script>
 
   <style>
     :root {
@@ -832,30 +833,7 @@
     async function loadAllData() {
       const syncStatus = document.getElementById("syncStatus");
 
-      // 1. Try load from cache first
-      const cachedMateri = localStorage.getItem("cache_materi");
-      const cachedListNilai = localStorage.getItem("cache_listNilai");
-      const cachedLogTugas = localStorage.getItem("cache_logTugas");
-      const cachedUser = localStorage.getItem("cache_user");
-      const cachedGuru = localStorage.getItem("cache_guru");
-      const lastUpdated = localStorage.getItem("cache_lastUpdated");
-
-      if (cachedMateri && cachedListNilai && cachedUser) {
-        try {
-          allMateriMentah = JSON.parse(cachedMateri);
-          allProgresMentah = JSON.parse(cachedListNilai);
-          allLogTugasMentah = cachedLogTugas ? JSON.parse(cachedLogTugas) : [];
-          allGuruMentah = cachedGuru ? JSON.parse(cachedGuru) : [];
-          renderMateri(allMateriMentah, allProgresMentah, allLogTugasMentah, allGuruMentah);
-          renderRanking(JSON.parse(cachedListNilai), JSON.parse(cachedUser));
-          if (lastUpdated) {
-            syncStatus.innerHTML = `<i data-lucide="refresh-cw" class="spin-anim" style="width:14px; height:14px;"></i> <span>Menyinkronkan...</span>`;
-            lucide.createIcons();
-          }
-        } catch (e) { console.error("Cache parsing error", e); }
-      }
-
-      // 2. Fetch fresh data in background
+      // Fetch only after the server validates this session.
       try {
         const t = new Date().getTime(); // Cache buster
         const [resMateri, resListNilai, resUser, resLogTugas, resGuru] = await Promise.all([
@@ -872,16 +850,8 @@
         const dataLogTugas = await resLogTugas.json();
         const dataGuru = await resGuru.json();
 
-        // Save to cache
-        localStorage.setItem("cache_materi", JSON.stringify(dataMateri));
-        localStorage.setItem("cache_listNilai", JSON.stringify(dataListNilai));
-        localStorage.setItem("cache_user", JSON.stringify(dataUser));
-        localStorage.setItem("cache_logTugas", JSON.stringify(dataLogTugas));
-        localStorage.setItem("cache_guru", JSON.stringify(dataGuru));
-
         const now = new Date();
         const timeString = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        localStorage.setItem("cache_lastUpdated", timeString);
 
         // Simpan ke variabel global
         allMateriMentah = dataMateri;
@@ -982,7 +952,9 @@
            }
         });
         
-        dataMateriFiltered = materiAsli;
+        dataMateriFiltered = materiAsli.filter(m =>
+          (getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']) || '').toString().trim() !== ''
+        );
         renderPengumuman(pengumuman);
 
         // Filter progres hanya untuk user yang sedang login
@@ -1074,7 +1046,7 @@
         // Hanya tambahkan ke openedMaterials JIKA materi tersebut tidak terkunci secara aturan (mencegah anomali jika listNilai dihapus)
         const openedMaterials = new Set();
         dataMateriFiltered.forEach((m, i) => {
-          const mid = getVal(m, ['idmateri', 'id_materi', 'materiid']) || (i + 1).toString();
+          const mid = getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']).toString().trim();
 
           let isMateriLocked = false;
 
@@ -1094,7 +1066,7 @@
         let upNextHTML = "";
         let upNextFound = false;
         list.innerHTML = dataMateriFiltered.map((m, i) => {
-          const mid = getVal(m, ['idmateri', 'id_materi', 'materiid']) || (i + 1).toString();
+          const mid = getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']).toString().trim();
           const tipeRaw = getVal(m, ['tipeevaluasi', 'tipe', 'evaluasi', 'jenis']);
           let tipe = (tipeRaw && tipeRaw.toString().trim() !== "") ? tipeRaw.toString().trim() : (i % 2 === 0 ? "Kuis" : "Tugas");
           // Format menjadi Kuis atau Tugas atau Praktik
@@ -1514,10 +1486,6 @@
     function openMateri(id) { window.location.href = "materi.html?id=" + id; }
     function logout() { 
       localStorage.removeItem("user"); 
-      localStorage.removeItem("cache_materi");
-      localStorage.removeItem("cache_listNilai");
-      localStorage.removeItem("cache_logTugas");
-      localStorage.removeItem("cache_lastUpdated");
       window.location.href = "index.html"; 
     }
 

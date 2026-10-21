@@ -1,93 +1,379 @@
-function doGet(e) {
-  var sheetName = e.parameter.sheet;
-  if (!sheetName) {
-    return ContentService.createTextOutput(JSON.stringify({error: "Sheet tidak valid"}))
-                         .setMimeType(ContentService.MimeType.JSON);
-  }
-  
-  if (sheetName === "public_guru") {
-    var sheetAdmin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("admin");
-    if (!sheetAdmin) return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
-    
-    var rawAdmin = sheetAdmin.getDataRange().getValues();
-    var result = [];
-    if (rawAdmin.length > 1) {
-      var headersAdmin = rawAdmin[0].map(function(h) { return h.toString().toLowerCase().replace(/[^a-z0-9]/g, ''); });
-      var idxNama = headersAdmin.indexOf("nama");
-      var idxMapel = headersAdmin.indexOf("mapel");
-      
-      for (var i = 1; i < rawAdmin.length; i++) {
-        if (idxNama !== -1 && idxMapel !== -1) {
-           result.push({
-             nama: rawAdmin[i][idxNama],
-             mapel: rawAdmin[i][idxMapel]
-           });
-        }
-      }
-    }
-    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
-  }
-  
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-  if (!sheet) {
-    if (sheetName === "admin") {
-      sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet("admin");
-      sheet.appendRow(["nama", "username", "password", "role", "mapel", "kelas"]);
-      sheet.appendRow(["Admin Utama", "admin", "admin123", "Administrator", "", ""]);
-    } else {
-      return ContentService.createTextOutput(JSON.stringify([]))
-                           .setMimeType(ContentService.MimeType.JSON);
+function getMateriIdColumn_(headers) {
+  var exact = headers.findIndex(function(h) { return h.toString().trim().toLowerCase() === "id_materi"; });
+  if (exact !== -1) return exact;
+  return headers.findIndex(function(h) { return h.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") === "idmateri"; });
+}
+
+function assertUniqueMateriId_(sheet, data, rowNumber) {
+  var id = (data.id_materi || data.idmateri || data.materiid || data.id || "").toString().trim();
+  if (!id) throw new Error("id_materi wajib diisi.");
+  var values = sheet.getDataRange().getValues();
+  if (!values.length) throw new Error("Header tab materi tidak ditemukan.");
+  var idColumn = getMateriIdColumn_(values[0]);
+  if (idColumn === -1) throw new Error("Kolom id_materi belum tersedia di tab materi.");
+  for (var i = 1; i < values.length; i++) {
+    if (i + 1 === rowNumber) continue;
+    if ((values[i][idColumn] || "").toString().trim().toLowerCase() === id.toLowerCase()) {
+      throw new Error("id_materi sudah digunakan: " + id);
     }
   }
-  
-  var rawData = sheet.getDataRange().getValues();
-  var displayData = sheet.getDataRange().getDisplayValues();
-  
-  if (rawData.length <= 1) {
-    return ContentService.createTextOutput(JSON.stringify([]))
-                         .setMimeType(ContentService.MimeType.JSON);
-  }
-  
-  // Baca nama header secara dinamis & kebal geser posisi
-  var headers = rawData[0].map(function(h) {
-    return h.toString().toLowerCase().replace(/[^a-z0-9]/g, ''); 
+  return id;
+}
+
+function jsonResponse_(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getSheet_(ss, name) {
+  var exact = ss.getSheetByName(name);
+  if (exact) return exact;
+  var wanted = name.toString().trim().toLowerCase();
+  return ss.getSheets().find(function(sheet) { return sheet.getName().toLowerCase() === wanted; }) || null;
+}
+
+function getMaxUploadBytes_(settingsSheet) {
+  var maxBytes = 5 * 1024 * 1024;
+  if (!settingsSheet || settingsSheet.getLastRow() < 2) return maxBytes;
+  settingsSheet.getDataRange().getValues().slice(1).forEach(function(row) {
+    if ((row[0] || "").toString().trim().toUpperCase() !== "MAX_UPLOAD_SIZE") return;
+    var megabytes = Number(row[1]);
+    if (isFinite(megabytes) && megabytes > 0) maxBytes = megabytes * 1024 * 1024;
   });
-  
-  var result = [];
-  for (var i = 1; i < rawData.length; i++) {
-    var obj = {};
-    for (var j = 0; j < headers.length; j++) {
-      if (headers[j]) {
-        // Ambil displayData khusus untuk waktu agar format (00:00) aman
-        if (headers[j] === "waktu" || headers[j] === "timestamp") {
-           obj[headers[j]] = displayData[i][j];
-        } else {
-           obj[headers[j]] = rawData[i][j];
-        }
-        
-        // Simpan key dengan huruf asli juga untuk kompatibilitas Admin Panel (CRUD)
-        var originalHeader = rawData[0][j].toString().trim();
-        if (originalHeader) {
-           if (originalHeader.toLowerCase() === "waktu" || originalHeader.toLowerCase() === "timestamp") {
-               obj[originalHeader] = displayData[i][j];
-           } else {
-               obj[originalHeader] = rawData[i][j];
-           }
-        }
-      }
-    }
-    
-    // TAMBAHAN UNTUK ADMIN PANEL: Menyimpan nomor baris untuk Edit/Hapus
-    obj.rowNumber = i + 1; 
-    
-    result.push(obj);
+  return maxBytes;
+}
+
+function rowObjects_(sheet) {
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var values = sheet.getDataRange().getValues();
+  var display = sheet.getDataRange().getDisplayValues();
+  var headers = values[0];
+  return values.slice(1).map(function(row, offset) {
+    var obj = {rowNumber: offset + 2};
+    headers.forEach(function(header, index) {
+      var original = header.toString().trim();
+      if (!original || /password|passcode|api.?key|secret/i.test(original)) return;
+      var normalized = original.toLowerCase().replace(/[^a-z0-9]/g, '');
+      var value = /^(waktu|timestamp)$/.test(normalized) ? display[offset + 1][index] : row[index];
+      obj[normalized] = value;
+      obj[original] = value;
+    });
+    return obj;
+  });
+}
+
+function authenticate_(ss, accountType, username, password) {
+  var sheet = ss.getSheetByName(accountType === "admin" ? "admin" : "user");
+  if (!sheet || !username || !password || sheet.getLastRow() < 2) return null;
+  var rows = rowObjects_(sheet);
+  var target = rows.find(function(row) {
+    return (row.username || row.Username || row.nisn || row.NISN || "").toString().trim().toLowerCase() === username.toString().trim().toLowerCase();
+  });
+  if (!target) return null;
+  var raw = sheet.getDataRange().getValues();
+  var headers = raw[0].map(function(header) { return header.toString().toLowerCase().replace(/[^a-z0-9]/g, ''); });
+  var passwordColumn = headers.indexOf("password");
+  var userColumn = headers.indexOf("username");
+  if (userColumn === -1) userColumn = headers.indexOf("nisn");
+  if (userColumn === -1) return null;
+  var actualRow = raw.find(function(row, index) {
+    return index > 0 && row[userColumn].toString().trim().toLowerCase() === username.toString().trim().toLowerCase();
+  });
+  if (passwordColumn === -1 || !actualRow || actualRow[passwordColumn].toString().trim() !== password.toString().trim()) return null;
+  var role = accountType === "admin" ? (target.role || target.Role || "Guru").toString().trim() : "Siswa";
+  var normalizedRole = role.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return {
+    username: target.username || target.Username || target.nisn || target.NISN || username,
+    nama: target.nama || target.Nama || "",
+    kelas: target.kelas || target.Kelas || "",
+    mapel: target.mapel || target.Mapel || "",
+    role: role,
+    accountType: accountType === "admin" ? "admin" : "student",
+    isSuperAdmin: accountType === "admin" && ["admin", "administrator", "superadmin"].indexOf(normalizedRole) !== -1
+  };
+}
+
+function createSession_(principal) {
+  var token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+  CacheService.getScriptCache().put("lms_session_" + token, JSON.stringify(principal), 21600);
+  return token;
+}
+
+function getSession_(token) {
+  if (!token || token.toString().length < 32) return null;
+  var value = CacheService.getScriptCache().get("lms_session_" + token);
+  return value ? JSON.parse(value) : null;
+}
+
+function getSafeSheetData_(ss, sheetName, principal) {
+  if (sheetName === "public_guru") return rowObjects_(getSheet_(ss, "admin")).map(function(row) {
+    return {nama: row.nama || row.Nama || "", mapel: row.mapel || row.Mapel || ""};
+  });
+  var sheet = getSheet_(ss, sheetName);
+  var rows = rowObjects_(sheet);
+  if (principal.accountType === "admin" && principal.isSuperAdmin && sheetName === "admin") {
+    return rows.map(function(row) {
+      Object.keys(row).forEach(function(key) { if (/password|passcode/i.test(key)) delete row[key]; });
+      return row;
+    });
   }
-  
-  return ContentService.createTextOutput(JSON.stringify(result))
-                       .setMimeType(ContentService.MimeType.JSON);
+  if (principal.accountType === "admin" && principal.isSuperAdmin) {
+    if (sheetName === "settings") return rows.filter(function(row) { return (row.key || row.Key || "").toString().toUpperCase() !== "GEMINI_API_KEY"; });
+    return rows;
+  }
+  var username = principal.username.toString().trim().toLowerCase();
+  if (principal.accountType === "admin") {
+    var classes = (principal.kelas || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
+    var subject = (principal.mapel || "").toString().trim().toLowerCase();
+    var assignedUsers = rowObjects_(getSheet_(ss, "user")).filter(function(row) {
+      return classes.indexOf((row.kelas || row.tingkat || "").toString().trim().toUpperCase()) !== -1;
+    });
+    var assignedUserIds = {};
+    assignedUsers.forEach(function(row) { assignedUserIds[(row.username || row.nisn || "").toString().trim().toLowerCase()] = true; });
+    if (sheetName === "admin" || sheetName === "settings") return [];
+    if (sheetName === "user") return assignedUsers;
+    if (["ListNilai", "listNilai", "logTugas", "logLogin"].indexOf(sheetName) !== -1) {
+      return rows.filter(function(row) { return assignedUserIds[(row.username || row.nisn || "").toString().trim().toLowerCase()]; });
+    }
+    if (sheetName === "materi") return subject ? rows.filter(function(row) {
+      return (row.mapel || row.matapelajaran || "").toString().trim().toLowerCase() === subject;
+    }) : [];
+    if (sheetName === "soal") {
+      var ids = {};
+      getSafeSheetData_(ss, "materi", principal).forEach(function(row) { ids[(row.id_materi || row.idmateri || row.materiid || row.id || "").toString().trim()] = true; });
+      return rows.filter(function(row) { return ids[(row.id_materi || row.idmateri || row.materiid || row.materi_id || "").toString().trim()]; });
+    }
+    return [];
+  }
+  if (sheetName === "admin") return [];
+  var studentRow = rowObjects_(getSheet_(ss, "user")).find(function(row) { return (row.username || row.nisn || "").toString().trim().toLowerCase() === username; });
+  if (sheetName === "user") return studentRow ? [studentRow] : [];
+  if (["ListNilai", "listNilai", "logTugas", "logLogin", "sesiKuis"].indexOf(sheetName) !== -1) {
+    return rows.filter(function(row) { return (row.username || row.nisn || "").toString().trim().toLowerCase() === username; });
+  }
+  if (sheetName === "settings") return rows.filter(function(row) { return (row.key || row.Key || "").toString().toUpperCase() === "MAX_UPLOAD_SIZE"; });
+  if (["materi", "soal"].indexOf(sheetName) !== -1) {
+    var studentClass = ((studentRow && (studentRow.kelas || studentRow.tingkat)) || "").toString().trim().toUpperCase();
+    var adminPrincipal = {accountType: "admin", isSuperAdmin: true};
+    var allowedMaterials = getSafeSheetData_(ss, "materi", adminPrincipal).filter(function(row) {
+      var grade = ((row.tingkat || row.kelas || "").toString().trim().toUpperCase());
+      return !grade || grade === "SEMUA" || grade === studentClass || grade === studentClass.replace(/\s.*$/, "");
+    });
+    var allowedIds = {};
+    allowedMaterials.forEach(function(row) { allowedIds[(row.id_materi || row.idmateri || row.materiid || row.id || "").toString().trim()] = true; });
+    var filtered = sheetName === "materi" ? allowedMaterials : rows.filter(function(row) {
+      return allowedIds[(row.id_materi || row.idmateri || row.materiid || row.materi_id || "").toString().trim()];
+    });
+    if (sheetName === "soal") filtered.forEach(function(row) {
+      Object.keys(row).forEach(function(key) { if (/^(kunci|jawaban|kuncijawaban)$/i.test(key.replace(/[^a-z0-9]/gi, ""))) delete row[key]; });
+    });
+    return filtered;
+  }
+  return [];
+}
+
+function isAuthorizedAction_(principal, action, sheetName) {
+  if (action === "getData") return ["materi", "soal", "ListNilai", "listNilai", "logTugas", "logLogin", "sesiKuis", "settings", "user", "public_guru", "admin"].indexOf(sheetName) !== -1;
+  if (action === "sessionInfo") return true;
+  if (principal.accountType === "student") {
+    return ["saveScore", "getTimer", "syncTimer", "uploadTugas"].indexOf(action) !== -1;
+  }
+  if (action === "reorderData") return false;
+  if (principal.isSuperAdmin) return ["saveData", "deleteData", "saveScore", "getTimer", "syncTimer", "uploadTugas", "updateNilaiByUsernameMateri", "updateNilaiBulk", "koreksiTugasAI", "markTugasRead", "updateMateriId", "createExamFromSelectedQuestions"].indexOf(action) !== -1;
+  if (["saveData", "updateNilaiByUsernameMateri", "updateNilaiBulk", "markTugasRead", "koreksiTugasAI"].indexOf(action) === -1) return false;
+  if (action === "saveData") return sheetName === "materi";
+  return ["updateNilaiByUsernameMateri", "updateNilaiBulk", "markTugasRead", "koreksiTugasAI"].indexOf(action) !== -1;
+}
+
+function teacherCanAccessStudent_(ss, principal, username, classValue) {
+  var assigned = (principal.kelas || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
+  var student = rowObjects_(getSheet_(ss, "user")).find(function(row) {
+    return (row.username || row.nisn || "").toString().trim().toLowerCase() === (username || "").toString().trim().toLowerCase();
+  });
+  var actualClass = ((student && (student.kelas || student.tingkat)) || classValue || "").toString().trim().toUpperCase();
+  return !!student && assigned.indexOf(actualClass) !== -1;
+}
+
+function teacherCanAccessMaterial_(ss, principal, idMateri) {
+  var materials = getSafeSheetData_(ss, "materi", {accountType: "admin", isSuperAdmin: true});
+  var matches = materials.filter(function(row) {
+    return (row.id_materi || row.idmateri || row.materiid || row.id || "").toString().trim() === (idMateri || "").toString().trim();
+  });
+  return matches.length === 1 && (matches[0].mapel || matches[0].matapelajaran || "").toString().trim().toLowerCase() === (principal.mapel || "").toString().trim().toLowerCase();
+}
+
+function validateTeacherRequest_(ss, principal, action, postData) {
+  if (principal.accountType !== "admin" || principal.isSuperAdmin) return true;
+  if (action === "saveData") {
+    var payload = typeof postData.data === "string" ? JSON.parse(postData.data) : postData.data;
+    if (!payload || (payload.mapel || payload.matapelajaran || "").toString().trim().toLowerCase() !== (principal.mapel || "").toString().trim().toLowerCase()) return false;
+    var assigned = (principal.kelas || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
+    var targetClasses = (payload.kelas || payload.tingkat || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
+    if (!targetClasses.length || !targetClasses.every(function(value) { return assigned.indexOf(value) !== -1; })) return false;
+    if (postData.rowNumber) {
+      var existing = rowObjects_(getSheet_(ss, "materi")).find(function(row) { return row.rowNumber === Number(postData.rowNumber); });
+      if (!existing || (existing.mapel || existing.matapelajaran || "").toString().trim().toLowerCase() !== (principal.mapel || "").toString().trim().toLowerCase()) return false;
+      var existingClasses = (existing.kelas || existing.tingkat || "").toString().toUpperCase().split(",").map(function(value) { return value.trim(); }).filter(Boolean);
+      if (!existingClasses.length || !existingClasses.every(function(value) {
+        return value === "SEMUA" ? false : assigned.some(function(assignedClass) { return pureGrade_(assignedClass) === pureGrade_(value); });
+      })) return false;
+    }
+    return true;
+  }
+  if (action === "updateNilaiByUsernameMateri" || action === "koreksiTugasAI") {
+    return teacherCanAccessStudent_(ss, principal, postData.username, postData.kelas) && teacherCanAccessMaterial_(ss, principal, postData.id_materi);
+  }
+  if (action === "updateNilaiBulk") {
+    return Array.isArray(postData.data) && postData.data.every(function(row) {
+      return teacherCanAccessStudent_(ss, principal, row.username, row.kelas) && teacherCanAccessMaterial_(ss, principal, row.id_materi);
+    });
+  }
+  if (action === "markTugasRead") {
+    var tugas = getSheet_(ss, "logTugas");
+    var rowNumber = parseInt(postData.rowNumber, 10);
+    if (!tugas || !rowNumber || rowNumber < 2 || rowNumber > tugas.getLastRow()) return false;
+    var values = tugas.getDataRange().getValues();
+    var headers = values[0].map(function(header) { return header.toString().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+    var userCol = headers.indexOf("username");
+    var classCol = headers.indexOf("kelas");
+    var materialCol = headers.indexOf("idmateri");
+    return userCol !== -1 && materialCol !== -1 && teacherCanAccessStudent_(ss, principal, values[rowNumber - 1][userCol], classCol === -1 ? "" : values[rowNumber - 1][classCol]) && teacherCanAccessMaterial_(ss, principal, values[rowNumber - 1][materialCol]);
+  }
+  if (action === "saveData") return false;
+  return true;
+}
+
+function pureGrade_(value) {
+  var grade = (value || "").toString().trim().toUpperCase();
+  if (grade.indexOf("SEMUA") === 0) return "SEMUA";
+  if (grade.indexOf("XII") === 0) return "XII";
+  if (grade.indexOf("XI") === 0) return "XI";
+  if (grade.indexOf("X") === 0) return "X";
+  return grade;
+}
+
+function computeQuizScore_(questionRows, idMateri, questionIds, answers, studentClass) {
+  if (!Array.isArray(questionIds) || !Array.isArray(answers) || !questionIds.length || questionIds.length !== answers.length) {
+    throw new Error("Daftar soal dan jawaban tidak valid.");
+  }
+  if (new Set(questionIds).size !== questionIds.length) throw new Error("Daftar soal berisi ID duplikat.");
+  var headers = questionRows[0].map(function(header) { return header.toString().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+  var materialColumn = headers.indexOf("idmateri");
+  var questionColumn = headers.indexOf("idsoal");
+  if (questionColumn === -1) questionColumn = headers.indexOf("id");
+  var gradeColumn = headers.indexOf("tingkat");
+  if (gradeColumn === -1) gradeColumn = headers.indexOf("kelas");
+  var answerColumn = headers.indexOf("kuncijawaban");
+  if (answerColumn === -1) answerColumn = headers.indexOf("kunci");
+  if (answerColumn === -1) answerColumn = headers.indexOf("jawaban");
+  if (materialColumn === -1 || questionColumn === -1 || answerColumn === -1) throw new Error("Struktur tab soal belum lengkap.");
+  var byId = {};
+  var studentGrade = pureGrade_(studentClass);
+  questionRows.slice(1).forEach(function(row) {
+    if ((row[materialColumn] || "").toString().trim() !== idMateri.toString().trim()) return;
+    var questionGrade = gradeColumn === -1 ? "" : (row[gradeColumn] || "").toString().trim();
+    if (questionGrade && pureGrade_(questionGrade) !== "SEMUA" && studentGrade && pureGrade_(questionGrade) !== studentGrade) return;
+    var id = (row[questionColumn] || "").toString().trim();
+    if (id) {
+      if (byId[id]) throw new Error("ID soal tidak unik untuk materi ini: " + id);
+      byId[id] = (row[answerColumn] || "").toString().trim().toUpperCase();
+    }
+  });
+  if (questionIds.length !== Object.keys(byId).length || questionIds.some(function(id) {
+    return !Object.prototype.hasOwnProperty.call(byId, id.toString().trim());
+  })) throw new Error("Daftar soal tidak sesuai dengan seluruh soal untuk materi ini.");
+  var correct = 0;
+  questionIds.forEach(function(id, index) {
+    var key = byId[id.toString().trim()];
+    if (!key) throw new Error("ID soal tidak ditemukan atau kunci kosong: " + id);
+    if ((answers[index] || "").toString().trim().toUpperCase() === key) correct++;
+  });
+  return Math.round(correct / questionIds.length * 100);
+}
+
+function doGet(e) {
+  return jsonResponse_({status: "error", code: "AUTH_REQUIRED", message: "Login diperlukan untuk mengakses data."});
 }
 
 function doPost(e) {
+  var postData;
+  try {
+    postData = JSON.parse(e.postData.contents);
+  } catch (parseError) {
+    return jsonResponse_({status: "error", message: "Permintaan tidak valid."});
+  }
+  var action = postData.action;
+  var sheetName = postData.sheet;
+  if ((sheetName || "").toString().toLowerCase() === "listnilai") sheetName = "ListNilai";
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (action === "login" || action === "loginAdmin") {
+    var loginPrincipal = authenticate_(ss, action === "loginAdmin" ? "admin" : "user", postData.username, postData.password);
+    if (!loginPrincipal) return jsonResponse_({status: "error", message: "Username atau password salah."});
+    var token = createSession_(loginPrincipal);
+    var log = ss.getSheetByName("logLogin");
+    if (log) log.appendRow([loginPrincipal.username, loginPrincipal.nama, loginPrincipal.kelas || "ADMIN", new Date().toISOString(), "Sukses"]);
+    delete loginPrincipal.accountType;
+    return jsonResponse_({status: "success", token: token, user: loginPrincipal});
+  }
+  var principal = getSession_(postData.token);
+  if (!principal) return jsonResponse_({status: "error", code: "UNAUTHORIZED", message: "Sesi tidak valid atau sudah berakhir. Silakan login kembali."});
+  if (action === "sessionInfo") return jsonResponse_({status: "success", user: principal});
+  if (action === "getData") return jsonResponse_(getSafeSheetData_(ss, sheetName, principal));
+  if (!isAuthorizedAction_(principal, action, sheetName)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Akun ini tidak memiliki izin untuk tindakan tersebut."});
+  if (!validateTeacherRequest_(ss, principal, action, postData)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Tindakan berada di luar kelas atau mapel akun ini."});
+  if (["saveData", "deleteData"].indexOf(action) !== -1) {
+    if (sheetName === "materi") {
+      var materialPayload = typeof postData.data === "string" ? JSON.parse(postData.data) : postData.data;
+      var currentMaterialId = "";
+      if (postData.rowNumber && materialPayload) {
+        var currentSheet = getSheet_(SpreadsheetApp.getActiveSpreadsheet(), "materi");
+        var currentValues = currentSheet.getDataRange().getValues();
+        var currentIdColumn = getMateriIdColumn_(currentValues[0]);
+        if (currentIdColumn !== -1 && currentValues[Number(postData.rowNumber) - 1]) currentMaterialId = currentValues[Number(postData.rowNumber) - 1][currentIdColumn].toString().trim();
+      }
+      if (action === "deleteData") return jsonResponse_({status: "error", message: "Penghapusan materi dapat memutus referensi permanen."});
+      assertUniqueMateriId_(getSheet_(SpreadsheetApp.getActiveSpreadsheet(), "materi"), materialPayload, postData.rowNumber ? Number(postData.rowNumber) : null);
+      if (currentMaterialId && currentMaterialId.toLowerCase() !== (materialPayload.id_materi || materialPayload.idmateri || materialPayload.materiid || materialPayload.id || "").toString().trim().toLowerCase()) {
+        return jsonResponse_({status: "error", message: "id_materi bersifat permanen dan tidak dapat diganti."});
+      }
+    }
+  }
+  if (principal.accountType === "student") {
+    var payload = postData.data && typeof postData.data === "object" ? postData.data : postData;
+    if (["saveLogin", "uploadTugas", "saveScore"].indexOf(action) !== -1) {
+      payload.username = principal.username;
+      payload.nama = principal.nama;
+      payload.kelas = principal.kelas;
+    }
+    if (["getTimer", "syncTimer"].indexOf(action) !== -1) payload.username = principal.username;
+    if (action === "uploadTugas" || action === "saveScore" || action === "syncTimer") {
+      var materialId = (payload.id_materi || "").toString().trim();
+      var materials = getSheet_(ss, "materi").getDataRange().getValues();
+      var materialHeaders = materials[0].map(function(header) { return header.toString().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+      var idCol = materialHeaders.indexOf("idmateri");
+      var typeCol = materialHeaders.indexOf("tipeevaluasi");
+      if (typeCol === -1) typeCol = materialHeaders.indexOf("tipe");
+      var gradeCol = materialHeaders.indexOf("tingkat");
+      if (gradeCol === -1) gradeCol = materialHeaders.indexOf("kelas");
+      var statusCol = materialHeaders.indexOf("status");
+      var materialRows = materials.slice(1).filter(function(row) { return (row[idCol] || "").toString().trim() === materialId; });
+      var studentGrade = pureGrade_(principal.kelas);
+      var materialGrade = materialRows.length === 1 && gradeCol !== -1 ? pureGrade_(materialRows[0][gradeCol]) : "";
+      if (idCol === -1 || !materialId || materialRows.length !== 1 || (statusCol !== -1 && (materialRows[0][statusCol] || "Aktif").toString().toLowerCase() === "draft")) {
+        return jsonResponse_({status: "error", message: "Materi tidak tersedia."});
+      }
+      if (materialGrade && materialGrade !== "SEMUA" && materialGrade !== studentGrade) {
+        return jsonResponse_({status: "error", message: "Materi ini tidak ditujukan untuk kelas akun ini."});
+      }
+      var actualType = typeCol === -1 ? "" : (materialRows[0][typeCol] || "").toString().trim().toLowerCase();
+      if (action === "uploadTugas" && ["tugas", "praktik", "ujian praktik", "editor"].indexOf(actualType) === -1) {
+        return jsonResponse_({status: "error", message: "Materi ini tidak menerima pengumpulan tugas."});
+      }
+      if (action === "saveScore" && ["kuis", "ujian", "survey"].indexOf(actualType) === -1) {
+        return jsonResponse_({status: "error", message: "Materi ini tidak menerima nilai kuis."});
+      }
+      if (action === "saveScore") payload.tipe = actualType;
+    }
+  }
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(60000); // Tunggu antrean hingga 60 detik (maksimal)
@@ -95,35 +381,49 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({status: "error", message: "Server sibuk, silakan coba sesaat lagi"}))
                          .setMimeType(ContentService.MimeType.JSON);
   }
-  
+
   try {
-    var postData = JSON.parse(e.postData.contents);
-    var action = postData.action;
-    var sheetName = postData.sheet;
     var data = postData.data; // Dipakai di fungsi admin jika ada JSON string
-    
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    
+
     // Beberapa action lama tidak mengirim sheetName, jadi didefinisikan secara lokal jika diperlukan.
-    var sheet = sheetName ? ss.getSheetByName(sheetName) : null;
-    
+    var sheet = sheetName ? getSheet_(ss, sheetName) : null;
+
     // ----------------------------------------------------
     // ACTION 1: MENYIMPAN NILAI KUIS/PRAKTIK (FUNGSI LAMA)
     // ----------------------------------------------------
     if (action === 'saveScore') {
-      sheet = ss.getSheetByName(sheetName);
+      sheet = getSheet_(ss, "ListNilai");
       if (!sheet) throw new Error("Sheet tidak ditemukan");
-      
+
       var headersRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      
+
       // Ambil data langsung dari postData (sesuai script lama)
       var pData = postData.data || postData;
-      
+      var materialRows = getSheet_(ss, "materi").getDataRange().getValues();
+      var materialHeaders = materialRows[0].map(function(header) { return header.toString().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+      var materialIdColumn = materialHeaders.indexOf("idmateri");
+      var materialTypeColumn = materialHeaders.indexOf("tipeevaluasi");
+      if (materialTypeColumn === -1) materialTypeColumn = materialHeaders.indexOf("tipe");
+      var materials = materialRows.slice(1).filter(function(row) { return (row[materialIdColumn] || "").toString().trim() === (pData.id_materi || "").toString().trim(); });
+      if (materialIdColumn === -1 || materials.length !== 1) throw new Error("Materi tidak ditemukan atau id_materi tidak unik.");
+      var evaluationType = materialTypeColumn === -1 ? "" : (materials[0][materialTypeColumn] || "").toString().trim();
+      if (/^survey$/i.test(evaluationType)) {
+        pData.nilai = 100;
+      } else {
+        if (!/^(kuis|ujian)$/i.test(evaluationType)) throw new Error("Materi ini tidak menerima nilai kuis.");
+        var questionRows = getSheet_(ss, "soal");
+        if (!questionRows || questionRows.getLastRow() < 2) throw new Error("Bank soal belum tersedia.");
+        var questionIds = (pData.urutan_soal || "").toString().split(",").map(function(id) { return id.trim(); });
+        pData.nilai = computeQuizScore_(questionRows.getDataRange().getValues(), pData.id_materi, questionIds, pData.jawaban, principal.kelas);
+      }
+      pData.tipe = evaluationType || "Kuis";
+      pData.timestamp = new Date().toISOString();
+
       // Otomatis buat header jawaban jika belum ada di sheet
       var normalizedHeaders = headersRow.map(function(h) {
         return h.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
       });
-      
+
       if (pData.jawaban && pData.jawaban.length > 0) {
         var addedNewHeader = false;
         for (var k = 0; k < pData.jawaban.length; k++) {
@@ -137,7 +437,7 @@ function doPost(e) {
           }
         }
       }
-      
+
       // Otomatis buat header urutan_soal jika belum ada
       if (pData.urutan_soal && normalizedHeaders.indexOf("urutansoal") === -1) {
         var newColIdx = headersRow.length + 1;
@@ -145,12 +445,12 @@ function doPost(e) {
         headersRow.push("Urutan Soal");
         normalizedHeaders.push("urutansoal");
       }
-      
+
       var newRow = new Array(headersRow.length).fill("");
-      
+
       for (var i = 0; i < headersRow.length; i++) {
         var headerName = headersRow[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-        
+
         if (headerName === "username") newRow[i] = pData.username;
         else if (headerName === "nilai" || headerName === "skor") newRow[i] = pData.nilai;
         else if (headerName === "timestamp") newRow[i] = pData.timestamp;
@@ -166,9 +466,9 @@ function doPost(e) {
           }
         }
       }
-      
+
       sheet.appendRow(newRow);
-      return ContentService.createTextOutput(JSON.stringify({status: "success"}))
+      return ContentService.createTextOutput(JSON.stringify({status: "success", nilai: pData.nilai}))
                            .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -176,19 +476,19 @@ function doPost(e) {
     // ACTION 2: MENGAMBIL WAKTU TIMER KUIS (FUNGSI LAMA)
     // ----------------------------------------------------
     if (action === "getTimer") {
-      sheet = ss.getSheetByName(sheetName);
-      if (!sheet) throw new Error("Sheet tidak ditemukan");
+      sheet = getSheet_(ss, sheetName || "sesiKuis");
+      if (!sheet) return jsonResponse_({status: "success", waktu_aktif: 0});
       var pData = postData.data || postData;
-      
+
       var rawData = sheet.getDataRange().getValues();
       if (rawData.length > 0) {
         var headers = rawData[0].map(function(h) { return h.toString().toLowerCase().replace(/[^a-z0-9]/g, ''); });
-        
+
         var idxUser = headers.indexOf("username");
         var idxMateri = headers.indexOf("idmateri");
         if(idxMateri === -1) idxMateri = headers.indexOf("id_materi");
         var idxWaktu = headers.indexOf("waktuaktif");
-        
+
         if(idxUser !== -1 && idxMateri !== -1 && idxWaktu !== -1) {
           for (var i = rawData.length - 1; i >= 1; i--) {
             if (rawData[i][idxUser] == pData.username && rawData[i][idxMateri] == pData.id_materi) {
@@ -206,13 +506,16 @@ function doPost(e) {
     // ACTION 3: MENYIMPAN/SYNC WAKTU TIMER KUIS (FUNGSI LAMA)
     // ----------------------------------------------------
     if (action === "syncTimer") {
-      sheet = ss.getSheetByName(sheetName);
-      if (!sheet) throw new Error("Sheet tidak ditemukan");
+      sheet = getSheet_(ss, sheetName || "sesiKuis");
+      if (!sheet) {
+        sheet = ss.insertSheet("sesiKuis");
+        sheet.appendRow(["username", "id_materi", "waktu_aktif"]);
+      }
       var pData = postData.data || postData;
-      
+
       var rawData = sheet.getDataRange().getValues();
       var headers = [];
-      
+
       // Jika sheet masih benar-benar kosong, buatkan header otomatis
       if (rawData.length === 0 || rawData[0].length === 0 || rawData[0][0] === "") {
         sheet.getRange(1, 1, 1, 3).setValues([["username", "idmateri", "waktuaktif"]]);
@@ -221,17 +524,17 @@ function doPost(e) {
       } else {
         headers = rawData[0].map(function(h) { return h.toString().toLowerCase().replace(/[^a-z0-9]/g, ''); });
       }
-      
+
       var idxUser = headers.indexOf("username");
       var idxMateri = headers.indexOf("idmateri");
       if (idxMateri === -1) idxMateri = headers.indexOf("id_materi");
       var idxWaktu = headers.indexOf("waktuaktif");
-      
+
       // Jika ternyata headernya tidak sesuai format, paksa saja ke indeks 0, 1, dan 2
       if (idxUser === -1) idxUser = 0;
       if (idxMateri === -1) idxMateri = 1;
       if (idxWaktu === -1) idxWaktu = 2;
-      
+
       var found = false;
       for (var i = rawData.length - 1; i >= 1; i--) {
         if (rawData[i][idxUser] == pData.username && rawData[i][idxMateri] == pData.id_materi) {
@@ -240,7 +543,7 @@ function doPost(e) {
           break;
         }
       }
-      
+
       if (!found) {
         var newRow = new Array(Math.max(headers.length, 3)).fill("");
         newRow[idxUser] = pData.username;
@@ -248,7 +551,7 @@ function doPost(e) {
         newRow[idxWaktu] = pData.waktu_aktif;
         sheet.appendRow(newRow);
       }
-      
+
       return ContentService.createTextOutput(JSON.stringify({status: "success"}))
                            .setMimeType(ContentService.MimeType.JSON);
     }
@@ -262,7 +565,7 @@ function doPost(e) {
         sheet = ss.insertSheet("logLogin");
         sheet.appendRow(["username", "nama", "kelas", "waktu", "status"]);
       }
-      
+
       var pData = postData.data || postData;
       sheet.appendRow([
          pData.username || "-",
@@ -271,7 +574,7 @@ function doPost(e) {
          pData.waktu || new Date().toISOString(),
          pData.status || "Sukses"
       ]);
-      
+
       return ContentService.createTextOutput(JSON.stringify({status: "success"}))
                            .setMimeType(ContentService.MimeType.JSON);
     }
@@ -281,20 +584,21 @@ function doPost(e) {
     // ===============================================
     if (action === "uploadTugas") {
       var pData = postData.data || postData;
-      
+
       // Ambil folder ID dari settings
       var settingsSheet = ss.getSheetByName("settings");
       var folderId = "";
+      var maxUploadBytes = getMaxUploadBytes_(settingsSheet);
       if (settingsSheet) {
          var setObj = settingsSheet.getDataRange().getValues();
          for(var s=1; s<setObj.length; s++){
-            if(setObj[s][0] === "FOLDER_TUGAS") { folderId = setObj[s][1]; break; }
+            if(setObj[s][0] === "FOLDER_TUGAS") folderId = setObj[s][1];
          }
       }
       if (!folderId) {
          throw new Error("Folder ID belum diatur oleh Admin. Hubungi Admin.");
       }
-      
+
       try {
          var folder = DriveApp.getFolderById(folderId);
          var file;
@@ -330,19 +634,22 @@ function doPost(e) {
              `;
              var blobHtml = Utilities.newBlob(htmlTemplate, MimeType.HTML, "tugas.html");
              var pdfBlob = blobHtml.getAs(MimeType.PDF);
+             if (pdfBlob.getBytes().length > maxUploadBytes) throw new Error("Ukuran file melebihi batas maksimal.");
              pdfBlob.setName(pData.filename);
              file = folder.createFile(pdfBlob);
          } else if (pData.base64) {
              // Decode Base64 (Untuk backward compatibility jika ada fitur lain yang masih pakai base64)
              var splitBase = pData.base64.split(',');
+             if (splitBase.length < 2) throw new Error("Format file tidak valid.");
              var type = splitBase[0].split(';')[0].replace('data:', '');
              var byteCharacters = Utilities.base64Decode(splitBase[1]);
+             if (byteCharacters.length > maxUploadBytes) throw new Error("Ukuran file melebihi batas maksimal.");
              var blob = Utilities.newBlob(byteCharacters, type, pData.filename);
              file = folder.createFile(blob);
          } else {
              throw new Error("Tidak ada data file yang dikirim.");
          }
-         
+
          // Atur izin file agar bisa dilihat oleh siapa saja yang memiliki link (tanpa harus login Google)
          try {
              file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -350,19 +657,19 @@ function doPost(e) {
              // Abaikan jika akun Google Workspace sekolah melarang berbagi file publik
              Logger.log("Gagal set izin sharing: " + sharingError.toString());
          }
-         
+
          var fileUrl = file.getUrl();
-         
+
          // Simpan record ke logTugas
          var sheetTugas = ss.getSheetByName("logTugas");
          if (!sheetTugas) {
             sheetTugas = ss.insertSheet("logTugas");
             sheetTugas.appendRow(["username", "nama", "kelas", "id_materi", "materi", "tipe", "link_tugas", "waktu"]);
          }
-         
+
          var now = new Date();
          var timeStr = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-         
+
          sheetTugas.appendRow([
             pData.username || "-",
             pData.nama || "-",
@@ -373,7 +680,7 @@ function doPost(e) {
             fileUrl,
             timeStr
          ]);
-         
+
          return ContentService.createTextOutput(JSON.stringify({status: "success", url: fileUrl}))
                               .setMimeType(ContentService.MimeType.JSON);
       } catch (err) {
@@ -387,16 +694,16 @@ function doPost(e) {
     if (action === "reorderData") {
       var sheet = ss.getSheetByName(postData.sheetName);
       if (!sheet) throw new Error("Sheet tidak ditemukan");
-      
+
       var newOrder = postData.newOrder; // Array of row numbers (1-based index from sheet)
       if (!newOrder || !Array.isArray(newOrder)) throw new Error("Invalid newOrder format");
-      
+
       var allData = sheet.getDataRange().getValues();
       var headers = allData[0];
       var newDataRows = [];
-      
+
       var processedRows = new Set();
-      
+
       // Masukkan data berdasarkan urutan baru
       for (var i = 0; i < newOrder.length; i++) {
         var rIdx = newOrder[i] - 1; // Konversi rowNumber (Google Sheet) ke array index (0-based)
@@ -405,7 +712,7 @@ function doPost(e) {
           processedRows.add(rIdx);
         }
       }
-      
+
       // Masukkan baris lain yang mungkin tidak ikut di-reorder (misal disembunyikan filter)
       // Taruh di bawah (atau di posisinya) agar data tidak hilang
       for (var i = 1; i < allData.length; i++) {
@@ -413,15 +720,15 @@ function doPost(e) {
           newDataRows.push(allData[i]);
         }
       }
-      
+
       if (newDataRows.length > 0) {
         // Timpa data mulai dari baris ke-2
         sheet.getRange(2, 1, newDataRows.length, headers.length).setValues(newDataRows);
         SpreadsheetApp.flush(); // Force write to sheet
       }
-      
-      return ContentService.createTextOutput(JSON.stringify({ 
-        status: "success", 
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
         message: "Urutan berhasil diperbarui"
       })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -448,11 +755,24 @@ function doPost(e) {
         throw new Error("Format data tidak valid (bukan JSON)");
       }
 
+      if (sheetName === "materi") {
+        var rowNumForId = postData.rowNumber ? parseInt(postData.rowNumber, 10) : null;
+        var submittedId = assertUniqueMateriId_(sheet, dataToSave, rowNumForId);
+        if (rowNumForId) {
+          var currentData = sheet.getDataRange().getValues();
+          var currentIdColumn = getMateriIdColumn_(currentData[0]);
+          var currentId = (currentData[rowNumForId - 1][currentIdColumn] || "").toString().trim();
+          if (!currentId || currentId.toLowerCase() !== submittedId.toLowerCase()) {
+            throw new Error("id_materi bersifat permanen dan tidak dapat diganti. Jalankan dry-run migrasi untuk ID yang kosong.");
+          }
+        }
+      }
+
       var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
       if (headers.length === 1 && headers[0] === "") headers = []; // Empty sheet edge case
-      
+
       var normalizedHeaders = headers.map(function(h) { return h.toString().trim().toLowerCase(); });
-      
+
       // Otomatis tambahkan kolom baru jika belum ada di sheet
       for (var key in dataToSave) {
         if (dataToSave.hasOwnProperty(key)) {
@@ -464,36 +784,36 @@ function doPost(e) {
            }
         }
       }
-      
+
       // JIKA MENGEDIT BARIS YANG ADA
       if (postData.rowNumber && postData.rowNumber !== "") {
         var rowNum = parseInt(postData.rowNumber);
         var updateRow = new Array(headers.length).fill("");
         var existingData = sheet.getRange(rowNum, 1, 1, headers.length).getValues()[0];
-        
+
         for (var i = 0; i < headers.length; i++) {
-          var h = headers[i].toString().trim(); 
+          var h = headers[i].toString().trim();
           var hLower = h.toLowerCase();
-          
+
           if (dataToSave[h] !== undefined) {
              updateRow[i] = dataToSave[h];
           } else if (dataToSave[hLower] !== undefined) {
              updateRow[i] = dataToSave[hLower];
           } else {
-             updateRow[i] = existingData[i]; 
+             updateRow[i] = existingData[i];
           }
         }
         sheet.getRange(rowNum, 1, 1, headers.length).setValues([updateRow]);
         return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Data berhasil diperbarui" }))
                              .setMimeType(ContentService.MimeType.JSON);
-      } 
+      }
       // JIKA MENAMBAH BARIS BARU
       else {
         var newRow = new Array(headers.length).fill("");
         for (var i = 0; i < headers.length; i++) {
           var h = headers[i].toString().trim();
           var hLower = h.toLowerCase();
-          
+
           if (dataToSave[h] !== undefined) {
              newRow[i] = dataToSave[h];
           } else if (dataToSave[hLower] !== undefined) {
@@ -521,25 +841,25 @@ function doPost(e) {
         throw new Error("Nomor baris tidak valid");
       }
     }
-    
+
     // ===============================================
     // ACTION 6: UPDATE NILAI LANGSUNG (ADMIN PANEL)
     // ===============================================
     if (action === "updateNilaiByUsernameMateri") {
-       var sheetNilai = ss.getSheetByName("listNilai");
+       var sheetNilai = getSheet_(ss, "ListNilai");
        if (!sheetNilai) throw new Error("Sheet listNilai tidak ditemukan");
-       
+
        var targetUser = postData.username;
        var targetMateri = postData.id_materi;
        var newNilai = postData.nilai;
        var newWaktu = postData.waktu; // Durasi baru
        var targetNama = postData.nama || "";
        var targetKelas = postData.kelas || "";
-       
+
        var sheetData = sheetNilai.getDataRange().getValues();
        var headers = sheetData[0];
        var userCol = -1, materiCol = -1, nilaiCol = -1, waktuCol = -1, namaCol = -1, kelasCol = -1;
-       
+
        for(var i = 0; i < headers.length; i++){
           var h = headers[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
           if(h === "username" || h === "nisn") userCol = i;
@@ -549,16 +869,16 @@ function doPost(e) {
           if(h === "nama" || h === "namasiswa" || h === "namalengkap") namaCol = i;
           if(h === "kelas" || h === "tingkat") kelasCol = i;
        }
-       
+
        if(userCol === -1 || materiCol === -1 || nilaiCol === -1) {
          throw new Error("Struktur kolom listNilai tidak lengkap (butuh username, id_materi, nilai)");
        }
-       
+
        var updated = false;
        for(var j = sheetData.length - 1; j > 0; j--) {
           var rowUsername = sheetData[j][userCol].toString().trim();
           var rowMateri = sheetData[j][materiCol].toString().trim();
-          
+
           if(rowUsername === targetUser && rowMateri === targetMateri) {
              sheetNilai.getRange(j + 1, nilaiCol + 1).setValue(newNilai);
              if (waktuCol !== -1 && newWaktu !== undefined) {
@@ -570,7 +890,7 @@ function doPost(e) {
              if (kelasCol !== -1 && targetKelas !== "") {
                  sheetNilai.getRange(j + 1, kelasCol + 1).setValue(targetKelas);
              }
-             
+
              // Update timestamp
              var now = new Date();
              var timeStr = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
@@ -580,12 +900,12 @@ function doPost(e) {
                      sheetNilai.getRange(j + 1, colIdx + 1).setValue(timeStr);
                  }
              }
-             
+
              updated = true;
              break;
           }
        }
-       
+
        if(updated) {
          return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Nilai & Durasi berhasil diperbarui" }))
                               .setMimeType(ContentService.MimeType.JSON);
@@ -596,7 +916,7 @@ function doPost(e) {
          newRow[nilaiCol] = newNilai;
          if(namaCol !== -1) newRow[namaCol] = targetNama;
          if(kelasCol !== -1) newRow[kelasCol] = targetKelas;
-         
+
          for(var i = 0; i < headers.length; i++){
            var h = headers[i].toString().toLowerCase();
            if(h === "waktu" || h === "timestamp") {
@@ -614,16 +934,16 @@ function doPost(e) {
        }
     }
     if (action === "updateNilaiBulk") {
-         var sheetNilai = ss.getSheetByName("listNilai");
+         var sheetNilai = getSheet_(ss, "ListNilai");
          if (!sheetNilai) throw new Error("Sheet listNilai tidak ditemukan");
-         
+
          var bulkData = postData.data; // Array of objects
          if(!bulkData || !Array.isArray(bulkData)) throw new Error("Format data bulk tidak valid");
-         
+
          var sheetData = sheetNilai.getDataRange().getValues();
          var headers = sheetData[0];
          var userCol = -1, materiCol = -1, nilaiCol = -1, waktuCol = -1, namaCol = -1, kelasCol = -1;
-         
+
          for(var i = 0; i < headers.length; i++){
             var h = headers[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
             if(h === "username" || h === "nisn") userCol = i;
@@ -633,13 +953,13 @@ function doPost(e) {
             if(h === "nama" || h === "namasiswa" || h === "namalengkap") namaCol = i;
             if(h === "kelas" || h === "tingkat") kelasCol = i;
          }
-         
+
          if(userCol === -1 || materiCol === -1 || nilaiCol === -1) {
            throw new Error("Struktur kolom listNilai tidak lengkap (butuh username, id_materi, nilai)");
          }
-         
+
          var newRows = [];
-         
+
          for (var d = 0; d < bulkData.length; d++) {
              var item = bulkData[d];
              var targetUser = item.username;
@@ -648,12 +968,12 @@ function doPost(e) {
              var newWaktu = item.waktu;
              var targetNama = item.nama || "";
              var targetKelas = item.kelas || "";
-             
+
              var updated = false;
              for(var j = sheetData.length - 1; j > 0; j--) {
                 var rowUsername = sheetData[j][userCol].toString().trim();
                 var rowMateri = sheetData[j][materiCol].toString().trim();
-                
+
                 if(rowUsername === targetUser && rowMateri === targetMateri) {
                    sheetNilai.getRange(j + 1, nilaiCol + 1).setValue(newNilai);
                    if (waktuCol !== -1 && newWaktu !== undefined) {
@@ -665,7 +985,7 @@ function doPost(e) {
                    if (kelasCol !== -1 && targetKelas !== "") {
                        sheetNilai.getRange(j + 1, kelasCol + 1).setValue(targetKelas);
                    }
-                   
+
                    var now = new Date();
                    var timeStr = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
                    for (var colIdx = 0; colIdx < headers.length; colIdx++) {
@@ -674,12 +994,12 @@ function doPost(e) {
                            sheetNilai.getRange(j + 1, colIdx + 1).setValue(timeStr);
                        }
                    }
-                   
+
                    updated = true;
                    break;
                 }
              }
-             
+
              if (!updated) {
                  var newRow = new Array(headers.length).fill("");
                  newRow[userCol] = targetUser;
@@ -687,7 +1007,7 @@ function doPost(e) {
                  newRow[nilaiCol] = newNilai;
                  if(namaCol !== -1) newRow[namaCol] = targetNama;
                  if(kelasCol !== -1) newRow[kelasCol] = targetKelas;
-                 
+
                  for(var i = 0; i < headers.length; i++){
                    var h = headers[i].toString().toLowerCase();
                    if(h === "waktu" || h === "timestamp") {
@@ -702,12 +1022,12 @@ function doPost(e) {
                  newRows.push(newRow);
              }
          }
-         
+
          if (newRows.length > 0) {
              var lastRow = sheetNilai.getLastRow();
              sheetNilai.getRange(lastRow + 1, 1, newRows.length, headers.length).setValues(newRows);
          }
-         
+
          return ContentService.createTextOutput(JSON.stringify({ status: "success", message: bulkData.length + " data nilai berhasil disimpan" }))
                               .setMimeType(ContentService.MimeType.JSON);
     }
@@ -722,14 +1042,14 @@ function doPost(e) {
       var kelas = postData.kelas;
       var fileUrl = postData.fileUrl;
       var materiText = postData.materiText;
-      
+
       // Ambil API Key dari settings
       var settingsSheet = ss.getSheetByName("settings");
       var apiKey = "";
       if (settingsSheet) {
          var setObj = settingsSheet.getDataRange().getValues();
          for(var s=1; s<setObj.length; s++){
-            if(setObj[s][0] === "GEMINI_API_KEY") { apiKey = setObj[s][1]; break; }
+            if(setObj[s][0] === "GEMINI_API_KEY") { apiKey = setObj[s][1].toString().trim(); break; }
          }
       }
       if (!apiKey) throw new Error("API Key Gemini belum diatur di sheet settings.");
@@ -738,7 +1058,7 @@ function doPost(e) {
       var fileId = fileUrl.match(/[-\w]{25,}/)[0];
       var file = DriveApp.getFileById(fileId);
       var docText = "";
-      
+
       if (file.getMimeType() === MimeType.PDF) {
          var tempDoc = Drive.Files.create({ title: "TempOCR", mimeType: MimeType.GOOGLE_DOCS }, file.getBlob());
          var doc = DocumentApp.openById(tempDoc.id);
@@ -751,7 +1071,7 @@ function doPost(e) {
       // Prompt penilaian
       var prompt = "Koreksi tugas menulis ulang materi.\n\nMateri acuan:\n" + materiText + "\n\nPekerjaan siswa:\n" + docText + "\n\nBerikan JSON murni tanpa markdown (kriteria: kelengkapan, keakuratan, kerapihan, saran [umpan balik singkat]). Skor 1-100. Contoh output: {\"kelengkapan\": 90, \"keakuratan\": 85, \"kerapihan\": 80, \"saran\": \"Bagus!\"}";
 
-      var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+      var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
       var response = UrlFetchApp.fetch(apiUrl, {
          "method": "POST",
          "contentType": "application/json",
@@ -763,12 +1083,29 @@ function doPost(e) {
       });
 
       var resJson = JSON.parse(response.getContentText());
+      if (resJson.error) {
+         throw new Error("Gemini API Error: " + resJson.error.message);
+      }
+      if (!resJson.candidates || resJson.candidates.length === 0) {
+         throw new Error("Gemini API tidak memberikan respons. Raw Response: " + response.getContentText());
+      }
       var aiText = resJson.candidates[0].content.parts[0].text;
-      var evaluation = JSON.parse(aiText.trim());
+      var evaluation;
+      try {
+         evaluation = JSON.parse(aiText.trim());
+      } catch (e) {
+         // Fallback jika AI tidak mengembalikan format JSON yang valid
+         evaluation = {
+            kelengkapan: 80,
+            keakuratan: 80,
+            kerapihan: 80,
+            saran: aiText.substring(0, 100)
+         };
+      }
       var rataRata = Math.round((evaluation.kelengkapan + evaluation.keakuratan + evaluation.kerapihan) / 3);
 
       // Simpan ke listNilai
-      var sheetNilai = ss.getSheetByName("listNilai");
+      var sheetNilai = getSheet_(ss, "ListNilai");
       if (!sheetNilai) {
          sheetNilai = ss.insertSheet("listNilai");
          sheetNilai.appendRow(["username", "nama", "kelas", "id_materi", "nilai", "tipe", "waktu", "kelengkapan", "keakuratan", "kerapihan", "saran"]);
@@ -776,14 +1113,14 @@ function doPost(e) {
 
       var headers = sheetNilai.getDataRange().getValues()[0];
       var normHeaders = headers.map(function(h) { return h.toString().toLowerCase().replace(/[^a-z0-9]/g, ""); });
-      
+
       var rowUserCol = normHeaders.indexOf("username");
       var rowMateriCol = normHeaders.indexOf("idmateri");
       if(rowMateriCol === -1) rowMateriCol = normHeaders.indexOf("idmateri");
-      
+
       var updated = false;
       var sheetData = sheetNilai.getDataRange().getValues();
-      
+
       // Update jika data nilai tugas ini sudah ada
       for(var j = sheetData.length - 1; j > 0; j--) {
          if (sheetData[j][rowUserCol].toString().trim() === username && sheetData[j][rowMateriCol].toString().trim() === idMateri) {
@@ -796,7 +1133,7 @@ function doPost(e) {
             break;
          }
       }
-      
+
       if (!updated) {
          var newRow = new Array(headers.length).fill("");
          newRow[normHeaders.indexOf("username")] = username;
@@ -820,28 +1157,28 @@ function doPost(e) {
     if (action === "markTugasRead") {
       var sheetTugas = ss.getSheetByName("logTugas");
       if (!sheetTugas) throw new Error("Sheet logTugas tidak ditemukan");
-      
+
       var rowNum = parseInt(postData.rowNumber);
       if (!rowNum || rowNum < 2) throw new Error("Nomor baris tidak valid");
-      
+
       var newStatus = postData.status; // "Sudah" atau "Belum"
-      
+
       var headers = sheetTugas.getRange(1, 1, 1, sheetTugas.getLastColumn()).getValues()[0];
       var statusCol = -1;
-      
+
       for (var i = 0; i < headers.length; i++) {
          if (headers[i].toString().toLowerCase() === "status_periksa") {
             statusCol = i + 1;
             break;
          }
       }
-      
+
       // Jika kolom status_periksa belum ada, buat otomatis di kanan
       if (statusCol === -1) {
          statusCol = headers.length + 1;
          sheetTugas.getRange(1, statusCol).setValue("status_periksa");
       }
-      
+
       sheetTugas.getRange(rowNum, statusCol).setValue(newStatus);
       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Status tugas diperbarui" }))
                            .setMimeType(ContentService.MimeType.JSON);
@@ -854,11 +1191,14 @@ function doPost(e) {
       var rowNum = parseInt(postData.rowNumber);
       var oldId = (postData.oldId || "").toString().trim();
       var newId = (postData.newId || "").toString().trim();
+      if (oldId.toLowerCase() !== newId.toLowerCase()) {
+        throw new Error("id_materi bersifat permanen dan tidak dapat diganti.");
+      }
       var tingkatMateri = (postData.tingkat || "X").toString().trim();
       var dataToSave = JSON.parse(postData.data);
       var sheetMateri = ss.getSheetByName("materi");
       var sheetSoal = ss.getSheetByName("soal");
-      
+
       if (newId !== "") {
         var allMateri = sheetMateri.getDataRange().getValues();
         var headersM = allMateri[0];
@@ -872,10 +1212,10 @@ function doPost(e) {
           if (i + 1 === rowNum) continue;
           var rowIdRaw = allMateri[i][idxIdM];
           var rowId = rowIdRaw ? rowIdRaw.toString().trim() : "";
-          
+
           var rowTingkatRaw = allMateri[i][idxTingkatM];
           var rowTingkat = rowTingkatRaw ? rowTingkatRaw.toString().trim() : "";
-          
+
           function getTingkatPure(t) {
             if(!t) return "X";
             t = t.toString().toUpperCase();
@@ -911,13 +1251,13 @@ function doPost(e) {
         var soalData = sheetSoal.getDataRange().getValues();
         var headersSoal = soalData[0];
         var idxIdSoal = -1;
-        
+
         // Cari kolom ID di Soal dengan sangat teliti
         for(var k=0; k<headersSoal.length; k++){
            var hs = headersSoal[k] ? headersSoal[k].toString().toLowerCase().replace(/[^a-z0-9]/g, '').trim() : "";
-           if(hs === "idmateri" || hs === "id_materi" || hs === "materiid" || hs === "modul" || hs === "id") { 
-             idxIdSoal = k; 
-             break; 
+           if(hs === "idmateri" || hs === "id_materi" || hs === "materiid" || hs === "modul" || hs === "id") {
+             idxIdSoal = k;
+             break;
            }
         }
 
@@ -925,7 +1265,7 @@ function doPost(e) {
           // Ambil seluruh kolom ID soal untuk diproses di memori (lebih cepat)
           var rangeSoal = sheetSoal.getRange(1, idxIdSoal + 1, sheetSoal.getLastRow(), 1);
           var colValues = rangeSoal.getValues();
-          
+
           for (var j = 1; j < colValues.length; j++) {
             var valSoal = colValues[j][0] ? colValues[j][0].toString().trim() : "";
             if (valSoal == oldId) { // Gunakan == untuk pencocokan angka/teks yang longgar
@@ -933,7 +1273,7 @@ function doPost(e) {
               syncCount++;
             }
           }
-          
+
           // Simpan kembali sekaligus jika ada yang berubah
           if (syncCount > 0) {
             rangeSoal.setValues(colValues);
@@ -941,12 +1281,12 @@ function doPost(e) {
         }
       }
 
-      return ContentService.createTextOutput(JSON.stringify({ 
-        status: "success", 
-        message: "Materi diperbarui. " + syncCount + " baris di sheet soal disinkronkan." 
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Materi diperbarui. " + syncCount + " baris di sheet soal disinkronkan."
       })).setMimeType(ContentService.MimeType.JSON);
     }
-    
+
     // ========================================================
     // ACTION: BATCH CREATE EXAM FROM SELECTED QUESTIONS
     // ========================================================
@@ -954,7 +1294,7 @@ function doPost(e) {
       var sheetMateri = ss.getSheetByName("materi");
       var sheetSoal = ss.getSheetByName("soal");
       if (!sheetMateri || !sheetSoal) throw new Error("Sheet kuis/materi tidak ditemukan");
-      
+
       // 1. Tambahkan materi kuis baru
       var headersM = sheetMateri.getRange(1, 1, 1, sheetMateri.getLastColumn()).getValues()[0];
       var newRowM = new Array(headersM.length).fill("");
@@ -968,25 +1308,25 @@ function doPost(e) {
         else if (h === "status") newRowM[i] = "Aktif";
       }
       sheetMateri.appendRow(newRowM);
-      
+
       // 2. Salin soal terpilih dengan ID Materi Ujian baru
       var headersS = sheetSoal.getRange(1, 1, 1, sheetSoal.getLastColumn()).getValues()[0];
       var idxIdMateriS = -1;
       var idxIdSoalS = -1;
-      
+
       for (var i = 0; i < headersS.length; i++) {
         var h = headersS[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
         if (h === "idmateri" || h === "id_materi" || h === "materiid") idxIdMateriS = i;
         if (h === "id" || h === "idsoal") idxIdSoalS = i;
       }
-      
+
       var selectedRows = postData.selectedQuestionRows; // Array of row numbers
       var newSoalRows = [];
-      
+
       for (var r = 0; r < selectedRows.length; r++) {
         var rowNum = parseInt(selectedRows[r]);
         var rowData = sheetSoal.getRange(rowNum, 1, 1, headersS.length).getValues()[0];
-        
+
         // Ubah ID Materi ke ID Ujian Baru
         if (idxIdMateriS !== -1) {
           rowData[idxIdMateriS] = postData.newExamId;
@@ -995,21 +1335,21 @@ function doPost(e) {
         if (idxIdSoalS !== -1) {
           rowData[idxIdSoalS] = postData.newExamId + "_" + (r + 1);
         }
-        
+
         newSoalRows.push(rowData);
       }
-      
+
       if (newSoalRows.length > 0) {
         var lastRowS = sheetSoal.getLastRow();
         sheetSoal.getRange(lastRowS + 1, 1, newSoalRows.length, headersS.length).setValues(newSoalRows);
       }
-      
-      return ContentService.createTextOutput(JSON.stringify({ 
-        status: "success", 
-        message: "Ujian Akhir berhasil dibuat dengan " + newSoalRows.length + " soal." 
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Ujian Akhir berhasil dibuat dengan " + newSoalRows.length + " soal."
       })).setMimeType(ContentService.MimeType.JSON);
     }
- 
+
     throw new Error("Aksi tidak dikenali: " + action);
 
   } catch (error) {
@@ -1025,7 +1365,7 @@ function doPost(e) {
 // FUNGSI UNTUK MENGAKTIFKAN OTORISASI DRIVE
 // ============================================
 function setupAwal() {
-  // Jalankan fungsi ini SATU KALI dari editor Apps Script 
+  // Jalankan fungsi ini SATU KALI dari editor Apps Script
   // untuk memunculkan popup izin akses penuh ke Google Drive.
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var folder = DriveApp.getRootFolder();

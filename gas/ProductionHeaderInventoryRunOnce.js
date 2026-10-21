@@ -1,0 +1,1 @@
+// Previous header wrapper disabled.

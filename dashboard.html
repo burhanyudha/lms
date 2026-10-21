@@ -763,6 +763,10 @@
         <div class="header-section"
           style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <h1 style="margin:0;">Peringkat Lengkap</h1>
+          <select id="filterMapelRankingSiswa" onchange="filterRanking()"
+            style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--text-main); background: white; cursor: pointer;">
+            <option value="Semua">Semua Mata Pelajaran</option>
+          </select>
           <select id="filterKelasDropdown" onchange="filterRanking()"
             style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); outline: none; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--text-main); background: white; cursor: pointer;">
             <option value="Semua">Semua Kelas</option>
@@ -861,7 +865,7 @@
 
         // Re-render with fresh data silently
         renderMateri(allMateriMentah, allProgresMentah, allLogTugasMentah, allGuruMentah);
-        renderRanking(dataListNilai, dataUser, dataLogTugas);
+        renderRanking(dataListNilai, dataUser, dataLogTugas, dataMateri);
 
         // Update indicator
         syncStatus.innerHTML = `<i data-lucide="check-circle" style="width:12px; height:12px; color:#10b981;"></i> <span style="color:#10b981;">${timeString}</span>`;
@@ -1275,7 +1279,7 @@
       return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
     }
 
-    function buildRankingData(students, scores, tasks) {
+    function buildRankingData(students, scores, tasks, materialIds) {
       const norm = value => (value || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
       const users = new Map(students.map(s => [String(s.username || s.nisn || s.nis || '').trim(), {
         username: String(s.username || s.nisn || s.nis || '').trim(), nama: s.nama || s.namalengkap || s.namasiswa || '',
@@ -1291,6 +1295,7 @@
         const key = `${norm(record.nama || record.namasiswa || record.namalengkap)}\u0000${norm(record.kelas || record.tingkat)}`;
         if (!student && key !== '\u0000' && counts.get(key) === 1) student = [...users.values()].find(s => `${norm(s.nama)}\u0000${norm(s.kelas)}` === key);
         const id = (record.id_materi || record.idmateri || record.materi_id || '').toString().trim();
+        if (materialIds && !materialIds.has(id)) return;
         const rawScore = type === 'survey' && (record.nilai ?? record.skor ?? record.point) !== undefined ? 100 : record.nilai ?? record.skor ?? record.point;
         if (!student || !id || rawScore == null || rawScore.toString().trim() === '' || /terkirim/i.test(rawScore.toString())) return;
         const score = Number.parseInt(rawScore, 10); if (Number.isNaN(score)) return;
@@ -1303,7 +1308,9 @@
       })).sort((a, b) => b.nilai - a.nilai || a.waktuSec - b.waktuSec);
     }
 
-    function renderRanking(rawNilai, dataUser, dataLogTugas = []) {
+    let rankingSource = {scores: [], students: [], tasks: [], materials: []};
+
+    function renderRanking(rawNilai, dataUser, dataLogTugas = [], materials = []) {
       const fullList = document.getElementById("rankingList");
       const homeList = document.getElementById("homeRankingList");
 
@@ -1311,7 +1318,17 @@
 
         const myTingkat = getTingkat(user);
         const rankingStudents = dataUser.filter(student => getTingkat(student) === myTingkat);
-        const aggregatedData = buildRankingData(rankingStudents, rawNilai, dataLogTugas).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
+        rankingSource = {scores: rawNilai, students: rankingStudents, tasks: dataLogTugas, materials};
+        const mapelSelect = document.getElementById('filterMapelRankingSiswa');
+        const selectedMapel = mapelSelect ? mapelSelect.value : 'Semua';
+        const mapelList = [...new Set(materials.map(m => m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran).filter(Boolean).map(v => v.toString().trim()))].sort();
+        if (mapelSelect) {
+          mapelSelect.innerHTML = '<option value="Semua">Semua Mata Pelajaran</option>' + mapelList.map(m => `<option value="${m}">${m}</option>`).join('');
+          mapelSelect.value = mapelList.includes(selectedMapel) || selectedMapel === 'Semua' ? selectedMapel : 'Semua';
+        }
+        const currentMapel = mapelSelect ? mapelSelect.value : 'Semua';
+        const materialIds = new Set(materials.filter(m => currentMapel === 'Semua' || (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || '').toString().trim() === currentMapel).map(m => (m.id_materi || m.idmateri || m.materiid || m.id || '').toString().trim()).filter(Boolean));
+        const aggregatedData = buildRankingData(rankingStudents, rawNilai, dataLogTugas, materialIds).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
         const kelasSet = new Set(aggregatedData.map(row => row.kelas).filter(Boolean));
 
         globalRankingData = aggregatedData;
@@ -1346,7 +1363,9 @@
       const filterKelas = document.getElementById("filterKelasDropdown").value;
       const fullList = document.getElementById("rankingList");
 
-      let filteredData = globalRankingData;
+      const selectedMapel = document.getElementById('filterMapelRankingSiswa')?.value || 'Semua';
+      const materialIds = new Set(rankingSource.materials.filter(m => selectedMapel === 'Semua' || (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || '').toString().trim() === selectedMapel).map(m => (m.id_materi || m.idmateri || m.materiid || m.id || '').toString().trim()).filter(Boolean));
+      let filteredData = buildRankingData(rankingSource.students, rankingSource.scores, rankingSource.tasks, materialIds).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
       if (filterKelas !== "Semua") {
         filteredData = globalRankingData.filter(u => u.kelas === filterKelas);
       }

@@ -621,6 +621,10 @@
               <label>Filter Kelas</label>
               <select class="form-control" id="filterKelasRanking" onchange="renderRankingAdmin()"></select>
             </div>
+            <div class="form-group" style="flex:1; min-width:190px; margin-bottom: 0;">
+              <label>Filter Mata Pelajaran</label>
+              <select class="form-control" id="filterMapelRanking" onchange="renderRankingAdmin()"></select>
+            </div>
           </div>
           <div class="table-responsive">
             <table>
@@ -1983,8 +1987,10 @@ window.koreksiTugasAI = async function(rowNumber) {
 
     function populateFilterRanking() {
       let selKelas = document.getElementById('filterKelasRanking');
-      if (!selKelas) return;
+      const selMapel = document.getElementById('filterMapelRanking');
+      if (!selKelas || !selMapel) return;
       let oldKelas = selKelas.value;
+      let oldMapel = selMapel.value;
       
       let kls = new Set();
       dataUser.forEach(u => {
@@ -1998,11 +2004,15 @@ window.koreksiTugasAI = async function(rowNumber) {
       });
       
       if (oldKelas) selKelas.value = oldKelas;
+      const mapelList = [...new Set(dataMateri.map(m => getVal(m, ['mapel', 'matapelajaran'])).filter(Boolean).map(v => v.toString().trim()))].sort();
+      selMapel.innerHTML = '<option value="">Semua Mapel</option>' + mapelList.map(m => `<option value="${m}">${m}</option>`).join('');
+      if (mapelList.includes(oldMapel)) selMapel.value = oldMapel;
     }
 
     function renderRankingAdmin() {
       const selTingkat = document.getElementById('filterTingkatRanking') ? document.getElementById('filterTingkatRanking').value : "";
       const selKelas = document.getElementById('filterKelasRanking') ? document.getElementById('filterKelasRanking').value : "";
+      const selMapel = document.getElementById('filterMapelRanking') ? document.getElementById('filterMapelRanking').value : "";
       const rankingStudents = dataUser.filter(u => {
         if ((getVal(u, ['role', 'peran']) || '').toString().toLowerCase().includes('admin')) return false;
         let k = getVal(u, ['kelas', 'rombel', 'tingkat']) || "Tanpa Kelas";
@@ -2017,7 +2027,8 @@ window.koreksiTugasAI = async function(rowNumber) {
         
         return (!selTingkat || t === selTingkat) && (!selKelas || k === selKelas);
       });
-      const aggregatedData = buildRankingData(rankingStudents, dataNilai, dataLogTugas).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
+      const materialIds = new Set(dataMateri.filter(m => !selMapel || (getVal(m, ['mapel', 'matapelajaran']) || '').toString().trim() === selMapel).map(m => (getVal(m, ['id_materi', 'idmateri', 'materiid', 'id']) || '').toString().trim()).filter(Boolean));
+      const aggregatedData = buildRankingData(rankingStudents, dataNilai, dataLogTugas, materialIds).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
 
       let html = '';
       aggregatedData.forEach((d, i) => {
@@ -2039,7 +2050,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       document.getElementById('tabelRankingBody').innerHTML = html || '<tr><td colspan="5" style="text-align:center">Belum ada data peringkat untuk kelas ini.</td></tr>';
     }
 
-    function buildRankingData(students, scores, tasks) {
+    function buildRankingData(students, scores, tasks, materialIds) {
       const norm = value => (value || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
       const users = new Map(students.map(s => [String(getVal(s, ['username', 'nisn', 'nis']) || '').trim(), {
         username: String(getVal(s, ['username', 'nisn', 'nis']) || '').trim(), nama: getVal(s, ['nama', 'namalengkap', 'namasiswa']) || '',
@@ -2055,6 +2066,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         const key = `${norm(getVal(record, ['nama', 'namasiswa', 'namalengkap']))}\u0000${norm(getVal(record, ['kelas', 'tingkat']))}`;
         if (!student && key !== '\u0000' && counts.get(key) === 1) student = [...users.values()].find(s => `${norm(s.nama)}\u0000${norm(s.kelas)}` === key);
         const id = (getVal(record, ['id_materi', 'idmateri', 'materi_id']) || '').toString().trim();
+        if (materialIds && !materialIds.has(id)) return;
         const value = type === 'survey' && getVal(record, ['nilai', 'skor', 'point']) !== undefined ? 100 : getVal(record, ['nilai', 'skor', 'point']);
         if (!student || !id || value == null || value.toString().trim() === '' || /terkirim/i.test(value.toString())) return;
         const score = parseInt(value, 10); if (Number.isNaN(score)) return;

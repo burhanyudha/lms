@@ -78,6 +78,13 @@ function post(payload) {
 assert.deepEqual(post({action: 'login', username: 'student-x', password: 'bad'}), {
   status: 'error', message: 'Username atau password salah.'
 });
+const studentOptions = post({action: 'studentOptions'});
+assert.deepEqual(studentOptions.map(({nama, kelas}) => [nama, kelas]), [['Student X', 'X TKR 1'], ['Student Y', 'XI RPL 1']]);
+assert.ok(studentOptions.every(option => Object.keys(option).sort().join(',') === 'kelas,nama'));
+const selectedLogin = post({action: 'login', nama: 'Student X', kelas: 'X TKR 1', password: 'secret'});
+assert.equal(selectedLogin.status, 'success');
+assert.equal(selectedLogin.user.username, 'student-x');
+assert.equal(post({action: 'login', nama: 'Student X', kelas: 'XI RPL 1', password: 'secret'}).status, 'error');
 const login = post({action: 'login', username: 'student-x', password: 'secret'});
 assert.equal(login.status, 'success');
 assert.ok(login.token);

@@ -66,7 +66,7 @@ function authenticate_(ss, accountType, username, password) {
   if (!sheet || !username || !password || sheet.getLastRow() < 2) return null;
   var rows = rowObjects_(sheet);
   var target = rows.find(function(row) {
-    return (row.username || row.Username || row.nisn || row.NISN || "").toString().trim().toLowerCase() === username.toString().trim().toLowerCase();
+    return (row.username || row.Username || row.nisn || row.NISN || row.nis || row.NIS || row.nama || row.Nama || "").toString().trim().toLowerCase() === username.toString().trim().toLowerCase();
   });
   if (!target) return null;
   var raw = sheet.getDataRange().getValues();
@@ -74,6 +74,8 @@ function authenticate_(ss, accountType, username, password) {
   var passwordColumn = headers.indexOf("password");
   var userColumn = headers.indexOf("username");
   if (userColumn === -1) userColumn = headers.indexOf("nisn");
+  if (userColumn === -1) userColumn = headers.indexOf("nis");
+  if (userColumn === -1) userColumn = headers.indexOf("nama");
   if (userColumn === -1) return null;
   var actualRow = raw.find(function(row, index) {
     return index > 0 && row[userColumn].toString().trim().toLowerCase() === username.toString().trim().toLowerCase();
@@ -82,7 +84,7 @@ function authenticate_(ss, accountType, username, password) {
   var role = accountType === "admin" ? (target.role || target.Role || "Guru").toString().trim() : "Siswa";
   var normalizedRole = role.toLowerCase().replace(/[^a-z0-9]/g, '');
   return {
-    username: target.username || target.Username || target.nisn || target.NISN || username,
+    username: target.username || target.Username || target.nisn || target.NISN || target.nis || target.NIS || target.nama || target.Nama || username,
     nama: target.nama || target.Nama || "",
     kelas: target.kelas || target.Kelas || "",
     mapel: target.mapel || target.Mapel || "",
@@ -90,6 +92,36 @@ function authenticate_(ss, accountType, username, password) {
     accountType: accountType === "admin" ? "admin" : "student",
     isSuperAdmin: accountType === "admin" && ["admin", "administrator", "superadmin"].indexOf(normalizedRole) !== -1
   };
+}
+
+function getStudentOptions_(ss) {
+  return rowObjects_(getSheet_(ss, "user")).filter(function(row) {
+    return row.nama && row.kelas;
+  }).map(function(row) {
+    return {nama: row.nama, kelas: row.kelas};
+  });
+}
+
+function authenticateStudentSelection_(ss, nama, kelas, password) {
+  var sheet = getSheet_(ss, "user");
+  if (!sheet || !nama || !kelas || !password || sheet.getLastRow() < 2) return null;
+  var values = sheet.getDataRange().getValues();
+  var headers = values[0].map(function(value) { return value.toString().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+  var passwordColumn = headers.indexOf("password");
+  var usernameColumn = headers.indexOf("username");
+  if (usernameColumn === -1) usernameColumn = headers.indexOf("nisn");
+  if (usernameColumn === -1) usernameColumn = headers.indexOf("nis");
+  if (usernameColumn === -1) usernameColumn = headers.indexOf("nama");
+  var nameColumn = headers.indexOf("nama");
+  var classColumn = headers.indexOf("kelas");
+  if (passwordColumn === -1 || usernameColumn === -1 || nameColumn === -1 || classColumn === -1 ||
+      !nama || !kelas) return null;
+  var matches = values.slice(1).filter(function(row) {
+    return row[nameColumn].toString().trim().toLowerCase() === nama.toString().trim().toLowerCase() &&
+      row[classColumn].toString().trim().toLowerCase() === kelas.toString().trim().toLowerCase() &&
+      row[passwordColumn].toString().trim() === password.toString().trim();
+  });
+  return matches.length === 1 ? authenticate_(ss, "user", matches[0][usernameColumn], password) : null;
 }
 
 function createSession_(principal) {
@@ -305,8 +337,11 @@ function doPost(e) {
   var sheetName = postData.sheet;
   if ((sheetName || "").toString().toLowerCase() === "listnilai") sheetName = "ListNilai";
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (action === "studentOptions") return jsonResponse_(getStudentOptions_(ss));
   if (action === "login" || action === "loginAdmin") {
-    var loginPrincipal = authenticate_(ss, action === "loginAdmin" ? "admin" : "user", postData.username, postData.password);
+    var loginPrincipal = action === "login" && postData.nama && postData.kelas
+      ? authenticateStudentSelection_(ss, postData.nama, postData.kelas, postData.password)
+      : authenticate_(ss, action === "loginAdmin" ? "admin" : "user", postData.username, postData.password);
     if (!loginPrincipal) return jsonResponse_({status: "error", message: "Username atau password salah."});
     var token = createSession_(loginPrincipal);
     var log = ss.getSheetByName("logLogin");

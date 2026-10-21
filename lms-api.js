@@ -43,11 +43,11 @@
         body: JSON.stringify({action, ...data, token: sessionToken()})
       }).then(checkAuthentication);
     },
-    async login(action, username, password) {
+    async login(action, identity, password) {
       const response = await nativeFetch(API_URL, {
         method: "POST",
         headers: {"Content-Type": "text/plain;charset=utf-8"},
-        body: JSON.stringify({action, username, password})
+        body: JSON.stringify({action, ...(typeof identity === "string" ? {username: identity} : identity), password})
       });
       return response.json();
     },

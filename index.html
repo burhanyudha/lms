@@ -549,10 +549,17 @@
 
             <div id="login-form" style="display: none;">
                 <div class="form-group">
-                    <label class="form-label">Username</label>
+                    <label class="form-label" for="kelas">Kelas</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-users"></i>
+                        <select id="kelas" onchange="handleKelasChange()"><option value="">Memuat kelas...</option></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="nama">Nama Lengkap</label>
                     <div class="input-wrapper">
                         <i class="fas fa-user"></i>
-                        <input type="text" id="username" placeholder="Username akun LMS" autocomplete="username">
+                        <select id="nama" disabled><option value="">Pilih kelas terlebih dahulu</option></select>
                     </div>
                 </div>
 
@@ -591,6 +598,8 @@
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbz8Q_B9ky4B_rEctis6YtBwqsbgzJyrt7-lsHg-TnuQTcxsaGB8Y8-9s3CFTXtS3LSs/exec";
 
+        let allStudents = [];
+
         window.onload = async () => {
             const session = localStorage.getItem("user");
             if (session) {
@@ -603,17 +612,42 @@
             }
             document.getElementById('loading-overlay').style.display = 'none';
             document.getElementById('login-form').style.display = 'block';
+            try {
+                const response = await lmsApi.call("studentOptions", {});
+                allStudents = await response.json();
+                renderKelasDropdown(allStudents);
+            } catch (error) {
+                document.getElementById("kelas").innerHTML = '<option value="">Daftar kelas gagal dimuat</option>';
+                updateMsg("Gagal memuat daftar siswa. Muat ulang halaman.", "#e11d48", "wifi");
+            }
         };
 
+        function renderKelasDropdown(students) {
+            const select = document.getElementById("kelas");
+            select.replaceChildren(new Option("-- Pilih Kelas --", ""));
+            [...new Set(students.map(student => student.kelas).filter(Boolean))].sort().forEach(kelas => select.add(new Option(kelas, kelas)));
+        }
+
+        function handleKelasChange() {
+            const kelas = document.getElementById("kelas").value;
+            const select = document.getElementById("nama");
+            select.replaceChildren(new Option(kelas ? "-- Pilih Nama --" : "Pilih kelas terlebih dahulu", ""));
+            allStudents.filter(student => student.kelas === kelas).sort((a, b) => a.nama.localeCompare(b.nama)).forEach(student => {
+                select.add(new Option(student.nama, student.nama));
+            });
+            select.disabled = !kelas;
+        }
+
         async function handleLogin() {
-            const username = document.getElementById("username").value.trim();
+            const kelas = document.getElementById("kelas").value;
+            const nama = document.getElementById("nama").value;
             const password = document.getElementById("password").value.trim();
             const btnText = document.getElementById("btn-text");
             const loader = document.getElementById("loader");
             const errorDiv = document.getElementById("error-msg");
 
-            if (!username || !password) {
-                updateMsg("Username dan password wajib diisi", "#e11d48", "exclamation-circle");
+            if (!kelas || !nama || !password) {
+                updateMsg("Mohon pilih kelas, nama, dan isi password", "#e11d48", "exclamation-circle");
                 return;
             }
 
@@ -623,7 +657,7 @@
             document.getElementById("btn-login").disabled = true;
 
             try {
-                const result = await lmsApi.login("login", username, password);
+                const result = await lmsApi.login("login", {nama, kelas}, password);
                 if (result.status === "success") {
                     const user = result.user;
                     user.tingkat = user.tingkat || (user.kelas || "X").toString().trim().toUpperCase().match(/^(XII|XI|X)/)?.[0] || "X";

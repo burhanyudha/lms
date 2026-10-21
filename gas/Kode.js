@@ -398,6 +398,43 @@ function pureGrade_(value) {
   return grade;
 }
 
+function getRankingData_(ss, principal) {
+  if (principal.accountType !== "student") return {status: "error", code: "FORBIDDEN", message: "Peringkat hanya tersedia untuk akun siswa."};
+  var grade = pureGrade_(principal.kelas);
+  var students = rowObjects_(getSheet_(ss, "user")).filter(function(row) { return pureGrade_(row.kelas || row.tingkat) === grade; });
+  var byIdentity = {}, byNameClass = {}, byId = {};
+  students.forEach(function(student, index) {
+    var username = (student.username || student.nisn || student.nis || "").toString().trim();
+    var identity = username.toLowerCase();
+    var key = (student.nama || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "\u0000" + (student.kelas || student.tingkat || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    var safeStudent = {username: identity === principal.username.toString().trim().toLowerCase() ? username : "SISWA-" + (index + 1), nama: student.nama || student.namalengkap || student.namasiswa || "", kelas: student.kelas || student.tingkat || ""};
+    byIdentity[identity] = safeStudent;
+    if (key !== "\u0000") byNameClass[key] = (byNameClass[key] || 0) + 1;
+    byId[identity] = safeStudent;
+  });
+  var materials = getSafeSheetData_(ss, "materi", {accountType: "admin", isSuperAdmin: true}).filter(function(row) {
+    var materialGrade = pureGrade_(row.tingkat || row.kelas);
+    return !materialGrade || materialGrade === "SEMUA" || materialGrade === grade;
+  }).map(function(row) { return {id_materi: (row.id_materi || row.idmateri || row.materiid || row.id || "").toString().trim(), mapel: row.mapel || row.matapelajaran || ""}; }).filter(function(row) { return row.id_materi; });
+  var allowedMaterialIds = {};
+  materials.forEach(function(row) { allowedMaterialIds[row.id_materi] = true; });
+  var projectRecords = function(sheetName) { return rowObjects_(getSheet_(ss, sheetName)).reduce(function(result, row) {
+    var id = (row.id_materi || row.idmateri || row.materi_id || "").toString().trim();
+    if (!allowedMaterialIds[id]) return result;
+    var identity = (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase();
+    var student = byIdentity[identity];
+    if (!student) {
+      var key = (row.nama || row.namasiswa || row.namalengkap || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "\u0000" + (row.kelas || row.tingkat || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (key !== "\u0000" && byNameClass[key] === 1) student = students.map(function(candidate) { return byIdentity[(candidate.username || candidate.nisn || candidate.nis || "").toString().trim().toLowerCase()]; }).find(function(candidate) { return candidate && (candidate.nama || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "\u0000" + candidate.kelas.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") === key; });
+    }
+    if (!student) return result;
+    var value = {username: student.username, nama: student.nama, kelas: student.kelas, id_materi: id, nilai: row.nilai != null ? row.nilai : row.skor != null ? row.skor : row.point || "", waktu: row.waktu || "", tipe: row.tipe || row.tipeevaluasi || row.jenis || ""};
+    result.push(value);
+    return result;
+  }, []); };
+  return {status: "success", students: students.map(function(row) { return byIdentity[(row.username || row.nisn || row.nis || "").toString().trim().toLowerCase()]; }), materials: materials, scores: projectRecords("ListNilai"), tasks: projectRecords("logTugas")};
+}
+
 function computeQuizScore_(questionRows, idMateri, questionIds, answers, studentClass) {
   if (!Array.isArray(questionIds) || !Array.isArray(answers) || !questionIds.length || questionIds.length !== answers.length) {
     throw new Error("Daftar soal dan jawaban tidak valid.");
@@ -467,6 +504,7 @@ function doPost(e) {
   var principal = getSession_(postData.token);
   if (!principal) return jsonResponse_({status: "error", code: "UNAUTHORIZED", message: "Sesi tidak valid atau sudah berakhir. Silakan login kembali."});
   if (action === "sessionInfo") return jsonResponse_({status: "success", user: principal});
+  if (action === "getRankingData") return jsonResponse_(getRankingData_(ss, principal));
   if (action === "getData") return jsonResponse_(getSafeSheetData_(ss, sheetName, principal));
   if (!isAuthorizedAction_(principal, action, sheetName)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Akun ini tidak memiliki izin untuk tindakan tersebut."});
   if (action === "saveAttendanceBulk" && !validateAttendanceRequest_(ss, principal, postData.data)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Data absensi tidak valid atau di luar kelas/mapel akun ini."});

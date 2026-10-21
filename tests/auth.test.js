@@ -6,7 +6,8 @@ const rowsBySheet = {
   user: [
     ['username', 'password', 'nama', 'kelas'],
     ['student-x', 'secret', 'Student X', 'X TKR 1'],
-    ['student-y', 'secret-y', 'Student Y', 'XI RPL 1']
+    ['student-y', 'secret-y', 'Student Y', 'XI RPL 1'],
+    ['student-z', 'secret-z', 'Student Z', 'X TKR 2']
   ],
   admin: [
     ['username', 'password', 'nama', 'role', 'kelas', 'mapel'],
@@ -90,7 +91,7 @@ assert.deepEqual(post({action: 'login', username: 'student-x', password: 'bad'})
   status: 'error', message: 'Username atau password salah.'
 });
 const studentOptions = post({action: 'studentOptions'});
-assert.deepEqual(studentOptions.map(({nama, kelas}) => [nama, kelas]), [['Student X', 'X TKR 1'], ['Student Y', 'XI RPL 1']]);
+assert.deepEqual(studentOptions.map(({nama, kelas}) => [nama, kelas]), [['Student X', 'X TKR 1'], ['Student Y', 'XI RPL 1'], ['Student Z', 'X TKR 2']]);
 assert.ok(studentOptions.every(option => Object.keys(option).sort().join(',') === 'kelas,nama'));
 const selectedLogin = post({action: 'login', nama: 'Student X', kelas: 'X TKR 1', password: 'secret'});
 assert.equal(selectedLogin.status, 'success');
@@ -106,6 +107,12 @@ assert.equal(post({action: 'sessionInfo'}).code, 'UNAUTHORIZED');
 assert.equal(post({action: 'getData', sheet: 'user', token: login.token}).length, 1);
 assert.equal(post({action: 'getData', sheet: 'user', token: login.token})[0].username, 'student-x');
 assert.equal(post({action: 'getData', sheet: 'user', token: login.token})[0].password, undefined);
+const studentRanking = post({action:'getRankingData',token:login.token});
+assert.equal(studentRanking.status,'success');
+assert.deepEqual(studentRanking.students.map(row=>row.nama),['Student X','Student Z']);
+assert.equal(studentRanking.students.some(row=>row.username==='student-z'),false);
+assert.equal(studentRanking.students.some(row=>row.password),false);
+assert.equal(studentRanking.scores.some(row=>row.password || row.jawaban),false);
 assert.deepEqual(post({action: 'getData', sheet: 'admin', token: login.token}), []);
 assert.deepEqual(post({action: 'getData', sheet: 'ListNilai', token: login.token}).map(row => row.id_materi), ['MAT-X']);
 const questions = post({action: 'getData', sheet: 'soal', token: login.token});
@@ -119,6 +126,7 @@ assert.equal(post({action: 'markTugasRead', token: login.token}).code, 'FORBIDDE
 
 const teacherLogin = post({action: 'loginAdmin', username: 'teacher-x', password: 'teacher-secret'});
 const teacher = context.getSession_(teacherLogin.token);
+assert.equal(post({action:'getRankingData',token:teacherLogin.token}).code,'FORBIDDEN');
 assert.equal(teacher.accountType, 'admin');
 assert.equal(teacher.isSuperAdmin, false);
 assert.deepEqual(context.getSafeSheetData_(context.SpreadsheetApp.getActiveSpreadsheet(), 'materi', teacher).map(row => row.id_materi), ['MAT-X', 'MAT-XI', 'MAT-X-OTO']);

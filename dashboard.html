@@ -840,12 +840,13 @@
       // Fetch only after the server validates this session.
       try {
         const t = new Date().getTime(); // Cache buster
-        const [resMateri, resListNilai, resUser, resLogTugas, resGuru] = await Promise.all([
+        const [resMateri, resListNilai, resUser, resLogTugas, resGuru, rankingResponse] = await Promise.all([
           fetch(`${API_URL}?sheet=materi&_t=${t}`),
           fetch(`${API_URL}?sheet=listNilai&_t=${t}`).catch(() => ({ json: async () => [] })),
           fetch(`${API_URL}?sheet=user&_t=${t}`).catch(() => ({ json: async () => [] })),
           fetch(`${API_URL}?sheet=logTugas&_t=${t}`).catch(() => ({ json: async () => [] })),
-          fetch(`${API_URL}?sheet=public_guru&_t=${t}`).catch(() => ({ json: async () => [] }))
+          fetch(`${API_URL}?sheet=public_guru&_t=${t}`).catch(() => ({ json: async () => [] })),
+          lmsApi.call('getRankingData', {}).then(response => response.json())
         ]);
 
         const dataMateri = await resMateri.json();
@@ -865,7 +866,8 @@
 
         // Re-render with fresh data silently
         renderMateri(allMateriMentah, allProgresMentah, allLogTugasMentah, allGuruMentah);
-        renderRanking(dataListNilai, dataUser, dataLogTugas, dataMateri);
+        if (rankingResponse.status === 'success') renderRanking(rankingResponse.scores, rankingResponse.students, rankingResponse.tasks, rankingResponse.materials);
+        else renderRanking(dataListNilai, dataUser, dataLogTugas, dataMateri);
 
         // Update indicator
         syncStatus.innerHTML = `<i data-lucide="check-circle" style="width:12px; height:12px; color:#10b981;"></i> <span style="color:#10b981;">${timeString}</span>`;
@@ -1366,9 +1368,14 @@
       const selectedMapel = document.getElementById('filterMapelRankingSiswa')?.value || 'Semua';
       const materialIds = new Set(rankingSource.materials.filter(m => selectedMapel === 'Semua' || (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || '').toString().trim() === selectedMapel).map(m => (m.id_materi || m.idmateri || m.materiid || m.id || '').toString().trim()).filter(Boolean));
       let filteredData = buildRankingData(rankingSource.students, rankingSource.scores, rankingSource.tasks, materialIds).map(row => ({...row, waktu: formatSecondsToTime(row.waktuSec)}));
-      if (filterKelas !== "Semua") {
-        filteredData = globalRankingData.filter(u => u.kelas === filterKelas);
-      }
+      if (filterKelas !== "Semua") filteredData = filteredData.filter(u => u.kelas === filterKelas);
+
+      globalRankingData = filteredData;
+      const myRankIndex = filteredData.findIndex(u => u.username.toString().trim().toLowerCase() === (user.username || user.nisn || user.nis || '').toString().trim().toLowerCase());
+      const rankElement = document.getElementById('myRank');
+      if (rankElement) rankElement.innerText = myRankIndex === -1 ? '-' : `#${myRankIndex + 1}`;
+      const homeList = document.getElementById('homeRankingList');
+      if (homeList) homeList.innerHTML = filteredData.slice(0, 3).map(renderRankItemHTML).join('');
 
       if (filteredData.length === 0) {
         fullList.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted);">Belum ada data peringkat untuk kelas ini.</div>`;

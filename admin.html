@@ -13,6 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <script src="pwa-handler.js" defer></script>
   <script src="rekap-match.js"></script>
+  <script src="task-preview.js"></script>
   <script src="lms-api.js"></script>
 
   <style>
@@ -964,6 +965,33 @@
     function logout() { localStorage.removeItem("admin_user"); window.location.href = "login-admin.html"; }
     function openModal(id) { document.getElementById(id).style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function previewTaskFile(task) {
+      if (!task) return;
+      const title = document.getElementById('previewModalTitle');
+      const content = document.getElementById('previewModalContent');
+      title.textContent = `Preview Tugas: ${task.nama}`;
+      content.replaceChildren();
+
+      const info = document.createElement('p');
+      info.textContent = `${task.materi} • ${task.kelas}`;
+      info.style.cssText = 'margin:0 0 12px; color:var(--text-muted);';
+
+      const frame = document.createElement('iframe');
+      frame.src = task.url;
+      frame.title = `Tugas ${task.nama}`;
+      frame.style.cssText = 'width:100%; height:65vh; border:1px solid #e5e7eb; border-radius:8px;';
+      frame.allowFullscreen = true;
+
+      const link = document.createElement('a');
+      link.href = task.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Jika preview tidak tampil, buka file di tab baru';
+      link.style.cssText = 'display:inline-block; margin-top:10px; color:var(--primary);';
+
+      content.append(info, frame, link);
+      openModal('previewModal');
+    }
     function showOverlay(text) { 
       document.getElementById('syncText').innerText = text; 
       document.getElementById('syncOverlay').style.display = 'flex'; 
@@ -2275,7 +2303,6 @@ window.koreksiTugasAI = async function(rowNumber) {
     }
 
     function renderTableNilai() {
-      const norm = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "").trim();
       let selKelas = document.getElementById('filterKelasNilai').value;
       let selMateri = document.getElementById('filterMateriNilai').value;
       let tbody = document.getElementById('nilaiTableBody');
@@ -2289,6 +2316,7 @@ window.koreksiTugasAI = async function(rowNumber) {
          let kelas = getVal(u, ['kelas', 'tingkat']);
          return (kelas || "").toString().trim() === selKelas.toString().trim();
       });
+      let matchesTaskStudent = createRekapRecordMatcher(students);
       
       let mObj = dataMateri.find(m => {
           let mId = (getVal(m, ['id', 'id_materi', 'idmateri', 'materiid']) || "").toString().trim();
@@ -2296,6 +2324,8 @@ window.koreksiTugasAI = async function(rowNumber) {
       });
       let rawTipe = mObj ? (getVal(mObj, ['tipeevaluasi', 'tipe_evaluasi', 'tipe']) || "Praktik").toLowerCase() : "praktik";
       let isUploadType = ["tugas"].includes(rawTipe);
+      let selectedMateriTitle = getVal(mObj || {}, ['judul', 'materi', 'namamateri']) || "Tugas";
+      let taskPreviews = [];
 
       let mappedStudents = students.map((u, originalIndex) => {
         let username = (getVal(u, ['username', 'nisn', 'nis']) || "").toString().trim();
@@ -2345,11 +2375,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         }
 
         // Cek logTugas
-        let upload = dataLogTugas.find(t => {
-            let tUser = norm(getVal(t, ['username']));
-            let tMid = (getVal(t, ['id_materi', 'materi']) || "").toString().trim();
-            return tUser === norm(username) && tMid === selMateri.toString().trim();
-        });
+        let upload = findStudentTaskUpload(dataLogTugas, u, selMateri, matchesTaskStudent);
 
         return { u, username, nama, maxNilai, statusKuis: maxNilai !== "" ? "Tuntas" : "Belum", waktuSubmit, durasiKuis, rawDate, upload, isUploadType };
       });
@@ -2403,11 +2429,16 @@ window.koreksiTugasAI = async function(rowNumber) {
         let nilaiOriginal = maxNilai;
         let nilaiRender = draftObj.nilai !== undefined ? draftObj.nilai : nilaiOriginal;
 
-        // Tampilkan link download/lihat tugas jika ada
+        // Tampilkan tombol preview untuk tugas Drive yang valid.
         let fileLinkHTML = "";
         if (upload) {
-           let fileUrl = getVal(upload, ['link_tugas', 'file']) || "#";
-           fileLinkHTML = `<br><a href="${fileUrl}" target="_blank" style="font-size:0.7rem; color:var(--primary); text-decoration:none; display:inline-flex; align-items:center; gap:2px; margin-top:4px;"><i data-lucide="external-link" style="width:12px; height:12px;"></i> Lihat Tugas</a>`;
+           let previewUrl = getDrivePreviewUrl(getVal(upload, ['link_tugas', 'file']));
+           if (previewUrl) {
+             let previewIndex = taskPreviews.push({ url: previewUrl, nama: nama.toString(), kelas: selKelas, materi: selectedMateriTitle.toString() }) - 1;
+             fileLinkHTML = `<br><button type="button" class="btn btn-sm btn-outline" data-task-preview-index="${previewIndex}" style="margin-top:4px; padding:4px 8px; font-size:0.75rem;">Preview Tugas</button>`;
+           } else {
+             fileLinkHTML = '<br><small style="color:var(--text-muted)">Link tugas tidak dapat dipreview.</small>';
+           }
            
            // Jika waktuSubmit kosong (belum dinilai), pakai waktu upload dari logTugas
            if (waktuSubmit === "-") {
@@ -2454,6 +2485,9 @@ window.koreksiTugasAI = async function(rowNumber) {
         </tr>`;
       });
       tbody.innerHTML = html || '<tr><td colspan="7" style="text-align:center">Tidak ada siswa di kelas ini.</td></tr>';
+      tbody.querySelectorAll('[data-task-preview-index]').forEach(button => {
+        button.addEventListener('click', () => previewTaskFile(taskPreviews[Number(button.dataset.taskPreviewIndex)]));
+      });
       restoreSortIcons();
     }
 

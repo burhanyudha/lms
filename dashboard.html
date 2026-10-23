@@ -846,7 +846,10 @@
           fetch(`${API_URL}?sheet=user&_t=${t}`).catch(() => ({ json: async () => [] })),
           fetch(`${API_URL}?sheet=logTugas&_t=${t}`).catch(() => ({ json: async () => [] })),
           fetch(`${API_URL}?sheet=public_guru&_t=${t}`).catch(() => ({ json: async () => [] })),
-          lmsApi.call('getRankingData', {}).then(response => response.json())
+          lmsApi.call('getRankingData', {}).then(response => response.json()).catch(error => {
+            console.error("Gagal memuat data peringkat", error);
+            return {status: "error"};
+          })
         ]);
 
         const dataMateri = await resMateri.json();

@@ -67,6 +67,11 @@ function attendanceHeaders_(sheetName) {
     : ["tanggal", "kelas", "mapel", "guru", "topik", "catatan", "updated_at"];
 }
 
+function attendanceKeyValue_(field, value) {
+  var normalized = (value || "").toString().trim().toLowerCase();
+  return field === "username" && /^\d+$/.test(normalized) ? normalized.replace(/^0+(?=\d)/, "") : normalized;
+}
+
 function getAttendanceSheet_(ss, sheetName) {
   var sheet = getSheet_(ss, sheetName);
   if (!sheet) {
@@ -87,7 +92,7 @@ function upsertAttendanceRows_(ss, sheetName, records, keyFields) {
   var values = sheet.getDataRange().getValues();
   var keyFor = function(row) { return keyFields.map(function(field) {
     var index = headers.indexOf(field);
-    return index === -1 ? "" : (row[index] || "").toString().trim().toLowerCase();
+    return attendanceKeyValue_(field, index === -1 ? "" : row[index]);
   }).join("\u0000"); };
   var rowsByKey = {};
   values.slice(1).forEach(function(row, index) { rowsByKey[keyFor(row)] = index + 2; });
@@ -101,7 +106,7 @@ function upsertAttendanceRows_(ss, sheetName, records, keyFields) {
         return true;
       });
     });
-    var key = keyFields.map(function(field) { return (record[field] || "").toString().trim().toLowerCase(); }).join("\u0000");
+    var key = keyFields.map(function(field) { return attendanceKeyValue_(field, record[field]); }).join("\u0000");
     var rowNumber = rowsByKey[key];
     if (rowNumber) sheet.getRange(rowNumber, 1, 1, headers.length).setValues([row]);
     else { rowsByKey[key] = values.length + appends.length + 1; appends.push(row); }

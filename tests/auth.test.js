@@ -176,6 +176,14 @@ const otherTeacher = {...teacher, username:'teacher-y', nama:'Teacher Y'};
 assert.equal(context.saveAttendanceBulk_(context.SpreadsheetApp.getActiveSpreadsheet(),otherTeacher,revisedAttendance).status,'success');
 assert.equal(rowsBySheet.absen.length,3);
 assert.equal(context.getSafeSheetData_(context.SpreadsheetApp.getActiveSpreadsheet(),'absen',teacher).length,2);
+rowsBySheet.absen.push(['2026-10-23','X TKR 1','Informatika','Teacher X','123456789','Student Leading Zero','Alpa','','']);
+const beforeLegacyUpdate=rowsBySheet.absen.length;
+context.upsertAttendanceRows_(context.SpreadsheetApp.getActiveSpreadsheet(),'absen',[{
+  tanggal:'2026-10-23',kelas:'X TKR 1',mapel:'Informatika',guru:'Teacher X',username:'0123456789',nama:'Student Leading Zero',status:'Hadir',keterangan:'',updated_at:'now'
+}],['tanggal','kelas','mapel','username','guru']);
+assert.equal(rowsBySheet.absen.length,beforeLegacyUpdate);
+assert.equal(rowsBySheet.absen.at(-1)[4],'0123456789');
+assert.equal(rowsBySheet.absen.at(-1)[6],'Hadir');
 const rootLogin = post({action: 'loginAdmin', username: 'admin-root', password: 'root-secret'});
 const changeId = post({
   action: 'updateMateriId',

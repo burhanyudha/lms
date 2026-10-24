@@ -36,10 +36,24 @@
     ) || null;
   }
 
+  function buildTaskGradePayload(task, nilai, waktu) {
+    return {
+      action: "updateNilaiByUsernameMateri",
+      username: task.username,
+      nama: task.nama,
+      kelas: task.kelas,
+      id_materi: task.idMateri,
+      nilai: nilai,
+      waktu: waktu
+    };
+  }
+
   getDrivePreviewUrl.findStudentTaskUpload = findStudentTaskUpload;
+  getDrivePreviewUrl.buildTaskGradePayload = buildTaskGradePayload;
   if (typeof module === "object" && module.exports) module.exports = getDrivePreviewUrl;
   else {
     root.getDrivePreviewUrl = getDrivePreviewUrl;
     root.findStudentTaskUpload = findStudentTaskUpload;
+    root.buildTaskGradePayload = buildTaskGradePayload;
   }
 })(globalThis);

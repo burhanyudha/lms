@@ -14,7 +14,7 @@
   <script src="pwa-handler.js" defer></script>
   <script src="rekap-match.js"></script>
   <script src="attendance-match.js?v=2"></script>
-  <script src="task-preview.js"></script>
+  <script src="task-preview.js?v=2"></script>
   <script src="lms-api.js"></script>
 
   <style>
@@ -990,7 +990,37 @@
       link.textContent = 'Jika preview tidak tampil, buka file di tab baru';
       link.style.cssText = 'display:inline-block; margin-top:10px; color:var(--primary);';
 
-      content.append(info, frame, link);
+      content.append(info);
+      if (task.username && task.idMateri) {
+        const gradeRow = document.createElement('div');
+        gradeRow.style.cssText = 'display:flex; gap:8px; align-items:center; margin:0 0 12px;';
+        const gradeInput = document.createElement('input');
+        gradeInput.type = 'number';
+        gradeInput.className = 'form-control';
+        gradeInput.placeholder = 'Nilai';
+        gradeInput.value = task.nilai || '';
+        gradeInput.style.cssText = 'max-width:120px;';
+        const saveButton = document.createElement('button');
+        saveButton.type = 'button';
+        saveButton.className = 'btn btn-primary';
+        saveButton.textContent = 'Simpan Nilai';
+        const saveStatus = document.createElement('small');
+        saveStatus.setAttribute('role', 'status');
+        saveButton.addEventListener('click', async () => {
+          if (gradeInput.value === '') return alert('Masukkan angka nilai!');
+          saveButton.disabled = true;
+          saveStatus.textContent = 'Menyimpan…';
+          try {
+            const saved = await simpanNilai(task.username, task.idMateri, task.nama, task.kelas, gradeInput.value, task.isUploadType, task.hasUpload);
+            saveStatus.textContent = saved ? 'Nilai berhasil disimpan.' : 'Nilai gagal disimpan.';
+          } finally {
+            saveButton.disabled = false;
+          }
+        });
+        gradeRow.append(gradeInput, saveButton, saveStatus);
+        content.append(gradeRow);
+      }
+      content.append(frame, link);
       openModal('previewModal');
     }
     function showOverlay(text) { 
@@ -2435,7 +2465,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         if (upload) {
            let previewUrl = getDrivePreviewUrl(getVal(upload, ['link_tugas', 'file']));
            if (previewUrl) {
-             let previewIndex = taskPreviews.push({ url: previewUrl, nama: nama.toString(), kelas: selKelas, materi: selectedMateriTitle.toString() }) - 1;
+             let previewIndex = taskPreviews.push({ url: previewUrl, nama: nama.toString(), kelas: selKelas, materi: selectedMateriTitle.toString(), username, idMateri: selMateri, nilai: nilaiRender, isUploadType, hasUpload: !!upload }) - 1;
              fileLinkHTML = `<br><button type="button" class="btn btn-sm btn-outline" data-task-preview-index="${previewIndex}" style="margin-top:4px; padding:4px 8px; font-size:0.75rem;">Preview Tugas</button>`;
            } else {
              fileLinkHTML = '<br><small style="color:var(--text-muted)">Link tugas tidak dapat dipreview.</small>';
@@ -2492,21 +2522,21 @@ window.koreksiTugasAI = async function(rowNumber) {
       restoreSortIcons();
     }
 
-    async function simpanNilai(username, idMateri, nama, kelas) {
-      let inputVal = document.getElementById(`nilai_${username}`).value;
+    async function simpanNilai(username, idMateri, nama, kelas, nilaiOverride, isUploadType, hasUpload) {
+      let inputVal = nilaiOverride !== undefined ? nilaiOverride : document.getElementById(`nilai_${username}`).value;
       let durasiVal = document.getElementById(`durasi_${username}`).value;
-      if(inputVal === "") return alert("Masukkan angka nilai!");
-      
-      await postData({
-        action: "updateNilaiByUsernameMateri",
-        username: username,
-        nama: nama,
-        kelas: kelas,
-        id_materi: idMateri,
-        nilai: inputVal,
-        waktu: durasiVal
-      });
+      if(inputVal === "") { alert("Masukkan angka nilai!"); return false; }
+
+      const saved = await postData(buildTaskGradePayload({ username, idMateri, nama, kelas }, inputVal, durasiVal));
+      if (!saved) return false;
+      const tableInput = document.getElementById(`nilai_${username}`);
+      if (tableInput) {
+        tableInput.value = inputVal;
+        tableInput.setAttribute('data-original-value', inputVal);
+        if (nilaiOverride !== undefined) checkMismatch(username, isUploadType, hasUpload);
+      }
       delete draftNilai[`${idMateri}_${username}`];
+      return true;
     }
 
     async function simpanSemuaNilai() {
@@ -3662,14 +3692,17 @@ window.koreksiTugasAI = async function(rowNumber) {
         if(result.status === "success") {
            showOverlay("Berhasil!");
            setTimeout(() => { loadAllData(); }, 1000);
+           return true;
         } else {
            alert("GAGAL: " + (result.message || "Terjadi kesalahan pada server"));
            hideOverlay();
+           return false;
         }
       } catch(e) {
         console.error(e);
         alert("ERROR: Tidak dapat terhubung ke server atau format data salah.");
         hideOverlay();
+        return false;
       }
     }
 

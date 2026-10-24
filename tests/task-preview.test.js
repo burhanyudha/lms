@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const getDrivePreviewUrl = require('../task-preview.js');
 const findStudentTaskUpload = require('../task-preview.js').findStudentTaskUpload;
+const buildTaskGradePayload = require('../task-preview.js').buildTaskGradePayload;
 const createRekapRecordMatcher = require('../rekap-match.js');
 
 assert.equal(
@@ -37,5 +38,10 @@ assert.equal(
   findStudentTaskUpload([upload], student, 'INF-01', createRekapRecordMatcher([student, {...student, username: 'NISN-2'}])),
   null
 );
+
+assert.deepEqual(buildTaskGradePayload({username: 'NISN-1', nama: 'Siswa Satu', kelas: 'X TKR 4', idMateri: 'INF-01'}, '88', '00:12'), {
+  action: 'updateNilaiByUsernameMateri', username: 'NISN-1', nama: 'Siswa Satu', kelas: 'X TKR 4',
+  id_materi: 'INF-01', nilai: '88', waktu: '00:12'
+});
 
 console.log('task preview checks passed');

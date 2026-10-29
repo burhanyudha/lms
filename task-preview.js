@@ -30,7 +30,7 @@
 
   function findStudentTaskUpload(records, student, materialId, matchesStudent) {
     const targetId = String(materialId || "").trim();
-    return (records || []).find(record =>
+    return [...(records || [])].reverse().find(record =>
       String(field(record, ["id_materi", "idmateri", "modul", "materi"]) || "").trim() === targetId &&
       matchesStudent(record, student)
     ) || null;

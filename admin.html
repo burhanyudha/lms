@@ -14,7 +14,7 @@
   <script src="pwa-handler.js" defer></script>
   <script src="rekap-match.js"></script>
   <script src="attendance-match.js?v=2"></script>
-  <script src="task-preview.js?v=2"></script>
+  <script src="task-preview.js?v=3"></script>
   <script src="lms-api.js"></script>
 
   <style>
@@ -218,6 +218,7 @@
     <button class="nav-item" id="tabMateriD" onclick="showTab('materi')"><i data-lucide="book-open"></i> Kelola Materi</button>
     <button class="nav-item" id="tabAnalisisD" onclick="showTab('analisis')"><i data-lucide="bar-chart-2"></i> Analisis Soal</button>
     <button class="nav-item" id="tabNilaiD" onclick="showTab('nilai')"><i data-lucide="graduation-cap"></i> Input Nilai</button>
+    <button class="nav-item" id="tabBandingD" onclick="showTab('banding')"><i data-lucide="message-square"></i> Banding Nilai</button>
     <button class="nav-item" id="tabTugasD" onclick="showTab('tugas')"><i data-lucide="file-text"></i> Tugas</button>
     <button class="nav-item" id="tabAbsenD" onclick="showTab('absen')"><i data-lucide="calendar-check"></i> Absensi Harian</button>
     <button class="nav-item" id="tabRekapAbsenD" onclick="showTab('rekapAbsen')"><i data-lucide="calendar-days"></i> Rekap Absensi</button>
@@ -234,6 +235,7 @@
     <button class="nav-item active" id="tabDashboard" onclick="showTab('dashboard')"><i data-lucide="layout-dashboard"></i> Dasbor</button>
     <button class="nav-item" id="tabMateri" onclick="showTab('materi')"><i data-lucide="book-open"></i> Materi</button>
     <button class="nav-item" id="tabNilai" onclick="showTab('nilai')"><i data-lucide="graduation-cap"></i> Nilai</button>
+    <button class="nav-item" id="tabBanding" onclick="showTab('banding')"><i data-lucide="message-square"></i> Banding</button>
     <button class="nav-item" id="tabTugas" onclick="showTab('tugas')"><i data-lucide="file-text"></i> Tugas</button>
     <button class="nav-item" id="tabRanking" onclick="showTab('ranking')"><i data-lucide="award"></i> Peringkat</button>
     <button class="nav-item" id="tabRekap" onclick="showTab('rekap')"><i data-lucide="clipboard-list"></i> Rekap</button>
@@ -244,6 +246,7 @@
   <main class="main-content">
     <div class="container">
 
+      <section id="bandingSection" style="display:none"><div class="header-section"><h1>Banding Nilai</h1></div><div id="bandingList" class="card" style="padding:20px">Memuat data...</div></section>
       <!-- ================= SECTION: DASHBOARD ================= -->
       <section id="dashboardSection">
         <div class="header-section">
@@ -285,6 +288,7 @@
           </div>
         </div>
 
+        <div class="card" style="margin-bottom:24px;padding:20px;"><h3>Banding yang perlu ditinjau</h3><div id="bandingDashboard">Memuat data...</div><button class="btn btn-outline" onclick="showTab('banding')">Lihat semua banding</button></div>
         <div style="display: flex; flex-direction: column; gap: 24px; margin-bottom: 24px;">
           <div class="card" style="margin-bottom: 0;">
             <div class="card-header">
@@ -449,7 +453,7 @@
                 </tr>
               </thead>
               <tbody id="analisisTableBody">
-                <tr><td colspan="7" style="text-align:center;">Pilih materi asal untuk menganalisis butir soal.</td></tr>
+                <tr><td colspan="8" style="text-align:center;">Pilih materi asal untuk menganalisis butir soal.</td></tr>
               </tbody>
             </table>
           </div>
@@ -562,6 +566,7 @@
                   <th style="cursor:pointer; user-select:none;" onclick="handleSort('nilai', 'waktu')">Waktu Submit <span id="sort_nilai_waktu" class="sort-icon-nilai"><i data-lucide="chevrons-up-down" style="width:14px; height:14px; display:inline-block; vertical-align:middle; margin-left:4px;"></i></span></th>
                   <th style="cursor:pointer; user-select:none;" onclick="handleSort('nilai', 'durasi')">Durasi <span id="sort_nilai_durasi" class="sort-icon-nilai"><i data-lucide="chevrons-up-down" style="width:14px; height:14px; display:inline-block; vertical-align:middle; margin-left:4px;"></i></span></th>
                   <th style="cursor:pointer; user-select:none; text-align:center; width: 120px;" onclick="handleSort('nilai', 'nilai')">Nilai Akhir <span id="sort_nilai_nilai" class="sort-icon-nilai"><i data-lucide="chevrons-up-down" style="width:14px; height:14px; display:inline-block; vertical-align:middle; margin-left:4px;"></i></span></th>
+                  <th>Feedback</th>
                   <th style="cursor:pointer; user-select:none;" onclick="handleSort('nilai', 'status')">Status <span id="sort_nilai_status" class="sort-icon-nilai"><i data-lucide="chevrons-up-down" style="width:14px; height:14px; display:inline-block; vertical-align:middle; margin-left:4px;"></i></span></th>
                   <th>Aksi</th>
                 </tr>
@@ -918,6 +923,7 @@
     let dataLogTugas = [];
     let dataAbsen = [];
     let dataJurnal = [];
+    let dataBanding = [];
     let activeFilteredTugas = [];
     let dataSettings = [];
     let dataGuru = [];
@@ -998,8 +1004,13 @@
         gradeInput.type = 'number';
         gradeInput.className = 'form-control';
         gradeInput.placeholder = 'Nilai';
-        gradeInput.value = task.nilai || '';
+        gradeInput.value = document.getElementById(`nilai_${task.username}`)?.value ?? task.nilai ?? '';
         gradeInput.style.cssText = 'max-width:120px;';
+        const feedbackInput = document.createElement('textarea');
+        feedbackInput.className = 'form-control';
+        feedbackInput.placeholder = 'Feedback untuk siswa';
+        feedbackInput.setAttribute('aria-label', 'Feedback untuk siswa');
+        feedbackInput.value = document.getElementById(`feedback_${task.username}`)?.value ?? task.feedback ?? '';
         const saveButton = document.createElement('button');
         saveButton.type = 'button';
         saveButton.className = 'btn btn-primary';
@@ -1011,13 +1022,13 @@
           saveButton.disabled = true;
           saveStatus.textContent = 'Menyimpan…';
           try {
-            const saved = await simpanNilai(task.username, task.idMateri, task.nama, task.kelas, gradeInput.value, task.isUploadType, task.hasUpload);
+            const saved = await simpanNilai(task.username, task.idMateri, task.nama, task.kelas, gradeInput.value, task.isUploadType, task.hasUpload, feedbackInput.value);
             saveStatus.textContent = saved ? 'Nilai berhasil disimpan.' : 'Nilai gagal disimpan.';
           } finally {
             saveButton.disabled = false;
           }
         });
-        gradeRow.append(gradeInput, saveButton, saveStatus);
+        gradeRow.append(gradeInput, feedbackInput, saveButton, saveStatus);
         content.append(gradeRow);
       }
       content.append(frame, link);
@@ -1087,14 +1098,14 @@
     };
 
     function showTab(tabName) {
-      ['dashboardSection', 'materiSection', 'nilaiSection', 'usersSection', 'settingsSection', 'tugasSection', 'rankingSection', 'rekapSection', 'analisisSection', 'guruSection', 'absenSection', 'rekapAbsenSection'].forEach(s => {
+      ['dashboardSection', 'materiSection', 'nilaiSection', 'usersSection', 'settingsSection', 'tugasSection', 'rankingSection', 'rekapSection', 'analisisSection', 'guruSection', 'absenSection', 'rekapAbsenSection', 'bandingSection'].forEach(s => {
         let el = document.getElementById(s);
         if (el) el.style.display = 'none';
       });
       let targetSec = document.getElementById(tabName + 'Section');
       if (targetSec) targetSec.style.display = 'block';
       
-      ['tabDashboard', 'tabMateri', 'tabNilai', 'tabUsers', 'tabSettings', 'tabTugas', 'tabRanking', 'tabRekap', 'tabAnalisis', 'tabGuru', 'tabAbsen', 'tabRekapAbsen'].forEach(id => {
+      ['tabDashboard', 'tabMateri', 'tabNilai', 'tabUsers', 'tabSettings', 'tabTugas', 'tabRanking', 'tabRekap', 'tabAnalisis', 'tabGuru', 'tabAbsen', 'tabRekapAbsen', 'tabBanding'].forEach(id => {
         let el = document.getElementById(id); if(el) el.classList.remove('active');
         let elD = document.getElementById(id+'D'); if(elD) elD.classList.remove('active');
       });
@@ -1245,6 +1256,7 @@
           }
         }
 
+        await loadBanding();
         renderDashboard();
         renderTableMateri();
         renderTableUser();
@@ -1270,6 +1282,43 @@
     // ============================================
     // RENDER DASHBOARD
     // ============================================
+    async function loadBanding() {
+      try {
+        const result = await (await lmsApi.call('getAppeals', {})).json();
+        if (result.status !== 'success') throw new Error(result.message || 'Gagal memuat banding');
+        dataBanding = result.appeals || [];
+        renderBanding();
+      } catch (error) {
+        document.getElementById('bandingDashboard').textContent = 'Gagal memuat banding.';
+        document.getElementById('bandingList').textContent = 'Gagal memuat banding.';
+      }
+    }
+    function renderBanding() {
+      const pending = dataBanding.filter(a => ['Menunggu', 'Diproses'].includes(a.status)).slice().reverse().slice(0, 5);
+      const render = (items, editable) => items.length ? items.map(a => {
+        const material = dataMateri.find(m => String(getVal(m, ['id_materi', 'idmateri', 'id']) || '') === String(a.id_materi));
+        const title = getVal(material || {}, ['judul', 'materi']) || a.id_materi;
+        const e = escapeAttendanceHtml;
+        return `<div style="border-bottom:1px solid var(--border-color);padding:12px 0"><strong>${e(a.nama)} • ${e(a.kelas)}</strong><div>${e(title)} — Nilai saat diajukan: ${e(a.nilai_awal)}${a.nilai_hasil !== undefined && a.nilai_hasil !== '' ? ' • Nilai setelah peninjauan: ' + e(a.nilai_hasil) : ''}</div><div>Alasan: ${e(a.alasan)}</div><div>Status: ${e(a.status)}${a.tanggapan ? ' • ' + e(a.tanggapan) : ''}</div>${editable && ['Menunggu','Diproses'].includes(a.status) ? `<button class="btn btn-sm btn-outline" data-appeal-id="${e(a.id_banding)}">Tindak lanjuti</button>` : ''}</div>`;
+      }).join('') : '<p>Belum ada pengajuan banding.</p>';
+      document.getElementById('bandingDashboard').innerHTML = render(pending, false);
+      const list = document.getElementById('bandingList');
+      list.innerHTML = render(dataBanding.slice().reverse(), true);
+      list.querySelectorAll('[data-appeal-id]').forEach(button => button.addEventListener('click', () => tindakBanding(button.dataset.appealId)));
+    }
+    async function tindakBanding(id) {
+      const status = prompt('Masukkan status: Diproses, Diterima, atau Ditolak');
+      if (status === null) return;
+      if (!['Diproses','Diterima','Ditolak'].includes(status.trim())) return alert('Status tidak valid.');
+      if (status.trim() === 'Diterima' && !confirm('Jika nilai perlu diubah, simpan nilai baru di Input Nilai sebelum memutuskan banding. Lanjutkan keputusan sekarang?')) return;
+      const tanggapan = prompt('Tanggapan untuk siswa:');
+      if (tanggapan === null) return;
+      try {
+        const result = await (await lmsApi.call('resolveAppeal', {id_banding:id, status:status.trim(), tanggapan})).json();
+        if (result.status !== 'success') throw new Error(result.message || 'Gagal menyimpan banding');
+        await loadBanding();
+      } catch (error) { alert(error.message); }
+    }
     function renderDashboard() {
       // Pastikan memfilter baris yang kosong (Google Sheets sering mengirim baris kosong jika tidak dihapus)
       let validNilai = dataNilai.filter(n => {
@@ -2180,7 +2229,8 @@ window.koreksiTugasAI = async function(rowNumber) {
         const score = parseInt(value, 10); if (Number.isNaN(score)) return;
         const time = parseTimeToSeconds(getVal(record, ['waktu', 'timestamp']));
         const old = student.quizzes.get(id);
-        if (!old || score > old.score || (score === old.score && time < old.waktuSec)) student.quizzes.set(id, {score, waktuSec: time});
+        const manual = String(getVal(record, ['penilaian_manual']) || '').toLowerCase() === 'ya';
+        if (!old || manual || (!old.manual && (score > old.score || (score === old.score && time < old.waktuSec)))) student.quizzes.set(id, {score, waktuSec: time, manual});
       });
       return [...users.values()].filter(s => s.quizzes.size).map(s => ({username: s.username, nama: s.nama, kelas: s.kelas,
         nilai: [...s.quizzes.values()].reduce((sum, q) => sum + q.score, 0), waktuSec: [...s.quizzes.values()].reduce((sum, q) => sum + q.waktuSec, 0)
@@ -2263,12 +2313,12 @@ window.koreksiTugasAI = async function(rowNumber) {
               selMateri.value = oldMateri;
               renderTableNilai();
           } else {
-              document.getElementById('nilaiTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center">Pilih materi untuk menampilkan siswa.</td></tr>';
+              document.getElementById('nilaiTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center">Pilih materi untuk menampilkan siswa.</td></tr>';
           }
       } else {
           // Default behavior if nothing was selected
           selMateri.innerHTML = '';
-          document.getElementById('nilaiTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
+          document.getElementById('nilaiTableBody').innerHTML = '<tr><td colspan="8" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
       }
 
       // Menambahkan onchange event pada filter Kelas untuk menyaring Materi
@@ -2298,7 +2348,7 @@ window.koreksiTugasAI = async function(rowNumber) {
 
       if (!selKelas) {
           mSelect.innerHTML = '<option value="">-- Pilih Kelas Terlebih Dahulu --</option>';
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
           return;
       }
 
@@ -2330,7 +2380,14 @@ window.koreksiTugasAI = async function(rowNumber) {
       });
       
       mSelect.innerHTML = validMateriHTML;
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
+    }
+
+    function selectGradeRecord(records) {
+      const valid = records.filter(r => { const value = getVal(r, ['nilai', 'skor', 'point']); return value !== undefined && value !== null && String(value).trim() !== '' && Number.isFinite(Number(value)); });
+      const manual = valid.filter(r => String(getVal(r, ['penilaian_manual']) || '').toLowerCase() === 'ya');
+      if (manual.length) return manual[manual.length - 1];
+      return valid.reduce((best, row) => !best || Number(getVal(row, ['nilai', 'skor', 'point'])) > Number(getVal(best, ['nilai', 'skor', 'point'])) ? row : best, null);
     }
 
     function renderTableNilai() {
@@ -2339,7 +2396,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       let tbody = document.getElementById('nilaiTableBody');
 
       if(!selKelas || !selMateri) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center">Pilih kelas dan materi terlebih dahulu.</td></tr>';
         return;
       }
 
@@ -2347,7 +2404,9 @@ window.koreksiTugasAI = async function(rowNumber) {
          let kelas = getVal(u, ['kelas', 'tingkat']);
          return (kelas || "").toString().trim() === selKelas.toString().trim();
       });
-      let matchesTaskStudent = createRekapRecordMatcher(students);
+      let matchesTaskStudent = createRekapRecordMatcher(dataUser);
+      const normalizeUser = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const knownUsers = new Set(dataUser.map(row => normalizeUser(getVal(row, ['username', 'nisn', 'nis']))).filter(Boolean));
       
       let mObj = dataMateri.find(m => {
           let mId = (getVal(m, ['id', 'id_materi', 'idmateri', 'materiid']) || "").toString().trim();
@@ -2364,11 +2423,8 @@ window.koreksiTugasAI = async function(rowNumber) {
 
         let userNilaiData = dataNilai.filter(n => {
            let nUserRaw = (getVal(n, ['username', 'nisn', 'nis']) || "").toString().trim();
-           let nNamaRaw = (getVal(n, ['nama', 'namasiswa', 'namalengkap']) || "").toString().trim();
-           
-           let isUserMatch = (nUserRaw === username) || 
-                             (nNamaRaw !== "" && nNamaRaw.toLowerCase() === nama.toString().trim().toLowerCase()) || 
-                             (nUserRaw !== "" && nUserRaw.toLowerCase() === nama.toString().trim().toLowerCase());
+           let normalizedRecordUser = normalizeUser(nUserRaw);
+           let isUserMatch = !(normalizedRecordUser && knownUsers.has(normalizedRecordUser) && normalizedRecordUser !== normalizeUser(username)) && matchesTaskStudent(n, u);
                              
            let nMatRaw = (getVal(n, ['id_materi', 'idmateri', 'modul']) || "").toString().trim();
            let isMateriMatch = nMatRaw === selMateri.toString().trim();
@@ -2381,15 +2437,11 @@ window.koreksiTugasAI = async function(rowNumber) {
         let waktuSubmit = "-";
         let durasiKuis = "-";
         let rawDate = 0;
+        let feedback = '';
         
-        if(userNilaiData.length > 0) {
-           userNilaiData.sort((a, b) => {
-               let valA = parseFloat(getVal(a, ['nilai', 'skor'])) || 0;
-               let valB = parseFloat(getVal(b, ['nilai', 'skor'])) || 0;
-               return valB - valA;
-           });
-           
-           let bestAttempt = userNilaiData[0];
+        const bestAttempt = selectGradeRecord(userNilaiData);
+        if(bestAttempt) {
+           feedback = getVal(bestAttempt, ['feedback']) || '';
            maxNilai = parseFloat(getVal(bestAttempt, ['nilai', 'skor'])) || 0;
            
            waktuSubmit = getVal(bestAttempt, ['timestamp', 'waktusubmit', 'tanggal']) || "-";
@@ -2408,7 +2460,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         // Cek logTugas
         let upload = findStudentTaskUpload(dataLogTugas, u, selMateri, matchesTaskStudent);
 
-        return { u, username, nama, maxNilai, statusKuis: maxNilai !== "" ? "Tuntas" : "Belum", waktuSubmit, durasiKuis, rawDate, upload, isUploadType };
+        return { u, username, nama, maxNilai, statusKuis: maxNilai !== "" ? "Tuntas" : "Belum", waktuSubmit, durasiKuis, rawDate, upload, isUploadType, feedback };
       });
 
       let html = '';
@@ -2446,7 +2498,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       }
 
       mappedStudents.forEach((item, i) => {
-        let { username, nama, maxNilai, statusKuis, waktuSubmit, durasiKuis, upload, isUploadType } = item;
+        let { username, nama, maxNilai, statusKuis, waktuSubmit, durasiKuis, upload, isUploadType, feedback } = item;
         let safeNama = nama.toString().replace(/'/g, "\\'");
         let safeKelas = selKelas.toString().replace(/'/g, "\\'");
         let safeMateri = selMateri.toString().replace(/'/g, "\\'");
@@ -2465,7 +2517,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         if (upload) {
            let previewUrl = getDrivePreviewUrl(getVal(upload, ['link_tugas', 'file']));
            if (previewUrl) {
-             let previewIndex = taskPreviews.push({ url: previewUrl, nama: nama.toString(), kelas: selKelas, materi: selectedMateriTitle.toString(), username, idMateri: selMateri, nilai: nilaiRender, isUploadType, hasUpload: !!upload }) - 1;
+             let previewIndex = taskPreviews.push({ url: previewUrl, nama: nama.toString(), kelas: selKelas, materi: selectedMateriTitle.toString(), username, idMateri: selMateri, nilai: nilaiRender, feedback: draftObj.feedback !== undefined ? draftObj.feedback : feedback, isUploadType, hasUpload: !!upload }) - 1;
              fileLinkHTML = `<br><button type="button" class="btn btn-sm btn-outline" data-task-preview-index="${previewIndex}" style="margin-top:4px; padding:4px 8px; font-size:0.75rem;">Preview Tugas</button>`;
            } else {
              fileLinkHTML = '<br><small style="color:var(--text-muted)">Link tugas tidak dapat dipreview.</small>';
@@ -2497,7 +2549,7 @@ window.koreksiTugasAI = async function(rowNumber) {
            statusBadge = maxNilai !== "" ? `<span class="badge active">Tuntas</span>` : `<span class="badge draft">Belum</span>`;
         }
 
-        html += `<tr>
+        html += `<tr data-username="${escapeAttendanceHtml(username)}">
           <td>${i+1}</td>
           <td style="font-weight:500;">${nama} ${fileLinkHTML}<br><small style="color:var(--text-muted)">${username}</small></td>
           <td style="text-align:center; font-size:0.85rem;">${waktuSubmit}</td>
@@ -2507,6 +2559,7 @@ window.koreksiTugasAI = async function(rowNumber) {
           <td style="text-align:center">
              <input type="number" id="nilai_${username}" class="form-control input-nilai" value="${nilaiRender}" data-original-value="${nilaiOriginal}" oninput="updateDraft('${safeMateri}', '${username}', 'nilai', this.value); checkMismatch('${username}', ${isUploadType}, ${!!upload})" placeholder="-" style="max-width:80px; display:inline-block; text-align:center; ${inputStyle}">
           </td>
+          <td><textarea id="feedback_${escapeAttendanceHtml(username)}" class="form-control" aria-label="Feedback ${escapeAttendanceHtml(nama)}" data-original-value="${escapeAttendanceHtml(feedback)}" oninput="updateDraft('${safeMateri}', '${username}', 'feedback', this.value)">${escapeAttendanceHtml(draftObj.feedback !== undefined ? draftObj.feedback : feedback)}</textarea></td>
           <td style="text-align:center" id="status_cell_${username}">
              ${statusBadge}
           </td>
@@ -2515,19 +2568,21 @@ window.koreksiTugasAI = async function(rowNumber) {
           </td>
         </tr>`;
       });
-      tbody.innerHTML = html || '<tr><td colspan="7" style="text-align:center">Tidak ada siswa di kelas ini.</td></tr>';
+      tbody.innerHTML = html || '<tr><td colspan="8" style="text-align:center">Tidak ada siswa di kelas ini.</td></tr>';
       tbody.querySelectorAll('[data-task-preview-index]').forEach(button => {
         button.addEventListener('click', () => previewTaskFile(taskPreviews[Number(button.dataset.taskPreviewIndex)]));
       });
       restoreSortIcons();
     }
 
-    async function simpanNilai(username, idMateri, nama, kelas, nilaiOverride, isUploadType, hasUpload) {
+    async function simpanNilai(username, idMateri, nama, kelas, nilaiOverride, isUploadType, hasUpload, feedbackOverride) {
       let inputVal = nilaiOverride !== undefined ? nilaiOverride : document.getElementById(`nilai_${username}`).value;
       let durasiVal = document.getElementById(`durasi_${username}`).value;
       if(inputVal === "") { alert("Masukkan angka nilai!"); return false; }
 
-      const saved = await postData(buildTaskGradePayload({ username, idMateri, nama, kelas }, inputVal, durasiVal));
+      const feedbackInput = document.getElementById(`feedback_${username}`);
+      const feedbackValue = feedbackOverride !== undefined ? feedbackOverride : feedbackInput.value;
+      const saved = await postData({...buildTaskGradePayload({ username, idMateri, nama, kelas }, inputVal, durasiVal), feedback: feedbackValue});
       if (!saved) return false;
       const tableInput = document.getElementById(`nilai_${username}`);
       if (tableInput) {
@@ -2535,6 +2590,7 @@ window.koreksiTugasAI = async function(rowNumber) {
         tableInput.setAttribute('data-original-value', inputVal);
         if (nilaiOverride !== undefined) checkMismatch(username, isUploadType, hasUpload);
       }
+      if (feedbackInput) { feedbackInput.value = feedbackValue; feedbackInput.setAttribute("data-original-value", feedbackValue); }
       delete draftNilai[`${idMateri}_${username}`];
       return true;
     }
@@ -2552,21 +2608,23 @@ window.koreksiTugasAI = async function(rowNumber) {
       let dataToSave = [];
       
       rows.forEach(tr => {
-         let userSpan = tr.querySelector('small');
-         if (!userSpan) return;
-         let username = userSpan.innerText.trim();
+         let username = tr.dataset.username;
+         if (!username) return;
          
          let inputNilai = document.getElementById(`nilai_${username}`);
          let inputDurasi = document.getElementById(`durasi_${username}`);
+         let inputFeedback = document.getElementById(`feedback_${username}`);
          
          if (inputNilai && inputNilai.value !== "") {
             let originalNilai = inputNilai.getAttribute("data-original-value") || "";
             let originalDurasi = inputDurasi ? (inputDurasi.getAttribute("data-original-value") || "") : "";
             let currentNilai = inputNilai.value.trim();
             let currentDurasi = inputDurasi ? inputDurasi.value.trim() : "";
+            let currentFeedback = inputFeedback ? inputFeedback.value : "";
+            let originalFeedback = inputFeedback ? inputFeedback.getAttribute("data-original-value") || "" : "";
             
             // Hanya simpan jika ada perubahan nilai atau durasi dari aslinya
-            if (currentNilai !== originalNilai || currentDurasi !== originalDurasi) {
+            if (currentNilai !== originalNilai || currentDurasi !== originalDurasi || currentFeedback !== originalFeedback) {
                 let nama = tr.querySelector('td:nth-child(2)').childNodes[0].nodeValue.trim();
                 dataToSave.push({
                    username: username,
@@ -2574,7 +2632,8 @@ window.koreksiTugasAI = async function(rowNumber) {
                    kelas: selKelas,
                    id_materi: selMateri,
                    nilai: currentNilai,
-                   waktu: currentDurasi
+                   waktu: currentDurasi,
+                   feedback: currentFeedback
                 });
             }
          }
@@ -2586,10 +2645,11 @@ window.koreksiTugasAI = async function(rowNumber) {
       
       if(!confirm(`Anda akan menyimpan ${dataToSave.length} data nilai sekaligus. Lanjutkan?`)) return;
       
-      await postData({
+      const saved = await postData({
          action: "updateNilaiBulk",
          data: dataToSave
       });
+      if (!saved) return;
       dataToSave.forEach(d => {
          delete draftNilai[`${d.id_materi}_${d.username}`];
       });
@@ -2914,8 +2974,9 @@ window.koreksiTugasAI = async function(rowNumber) {
                   if (tipe === "survey") return 100;
                   return parseInt(getVal(n, ['nilai', 'skor']) || 0);
               }).filter(val => !isNaN(val));
-              if (scores.length > 0) {
-                  const maxS = Math.max(...scores);
+              if (selectGradeRecord(filteredNilai)) {
+                  const selected = selectGradeRecord(filteredNilai);
+                  const maxS = tipe === 'survey' ? 100 : Number(getVal(selected, ['nilai', 'skor', 'point']));
                   totalScore += maxS;
                   countScored++;
                   
@@ -3057,8 +3118,9 @@ window.koreksiTugasAI = async function(rowNumber) {
                 if (tipe === "survey") return 100;
                 return parseInt(getVal(n, ['nilai', 'skor']) || 0);
             }).filter(v => !isNaN(v));
-            if (scores.length > 0) {
-              const maxS = Math.max(...scores);
+            if (selectGradeRecord(filteredNilai)) {
+              const selected = selectGradeRecord(filteredNilai);
+              const maxS = tipe === 'survey' ? 100 : Number(getVal(selected, ['nilai', 'skor', 'point']));
               totalScore += maxS;
               countScored++;
               row.push(maxS);
@@ -3202,7 +3264,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       const tbody = document.getElementById('analisisTableBody');
       
       if (!selMateri) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Pilih materi asal untuk menganalisis butir soal.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Pilih materi asal untuk menganalisis butir soal.</td></tr>';
         document.getElementById('analisisTotalSiswa').innerText = '-';
         document.getElementById('analisisAvgScore').innerText = '-';
         document.getElementById('analisisSoalLayak').innerText = '-';
@@ -3271,7 +3333,7 @@ window.koreksiTugasAI = async function(rowNumber) {
       
       if (filteredSoal.length === 0) {
         hideOverlay();
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger); font-weight:bold;">Tidak ada soal yang terdaftar untuk tingkat/kuis ini di tab "soal".</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--danger); font-weight:bold;">Tidak ada soal yang terdaftar untuk tingkat/kuis ini di tab "soal".</td></tr>`;
         document.getElementById('analisisTotalSiswa').innerText = '0';
         document.getElementById('analisisAvgScore').innerText = '0';
         document.getElementById('analisisSoalLayak').innerText = '0';

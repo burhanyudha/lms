@@ -37,6 +37,7 @@ const rowsBySheet = {
   logLogin: [['username', 'nama', 'kelas', 'waktu', 'status']],
   settings: [['key', 'value'], ['MAX_UPLOAD_SIZE', 5]]
 };
+rowsBySheet.bandingNilai = [['id_banding','username','nama','kelas','id_materi','nilai_awal','alasan','status','tanggal_pengajuan','tanggapan','diperiksa_oleh','tanggal_diperiksa','nilai_hasil']];
 rowsBySheet.absen = [['tanggal','kelas','mapel','guru','username','nama','status','keterangan','updated_at']];
 rowsBySheet.jurnal = [['tanggal','kelas','mapel','guru','topik','catatan','updated_at']];
 
@@ -73,7 +74,8 @@ const context = {
     put: (key, value) => cache.set(key, value),
     get: key => cache.get(key) || null
   })},
-  Utilities: {getUuid: () => 'xxxxxxxx-xxxx-xxxx-xxxx-' + String(++uuid).padStart(12, '0')},
+  Utilities: {getUuid: () => 'xxxxxxxx-xxxx-xxxx-xxxx-' + String(++uuid).padStart(12, '0'), formatDate: () => '2026-10-29 10:00:00'},
+  Session: {getScriptTimeZone: () => 'Asia/Jakarta'},
   ContentService: {
     MimeType: {JSON: 'application/json'},
     createTextOutput: text => ({text, setMimeType() { return this; }})
@@ -82,6 +84,7 @@ const context = {
 };
 
 vm.runInNewContext(fs.readFileSync('gas/Kode.js', 'utf8'), context);
+vm.runInNewContext(fs.readFileSync('gas/Appeals.js', 'utf8'), context);
 function post(payload) {
   const response = context.doPost({postData: {contents: JSON.stringify(payload)}});
   return JSON.parse(response.text);
@@ -185,6 +188,10 @@ assert.equal(rowsBySheet.absen.length,beforeLegacyUpdate);
 assert.equal(rowsBySheet.absen.at(-1)[4],'0123456789');
 assert.equal(rowsBySheet.absen.at(-1)[6],'Hadir');
 const rootLogin = post({action: 'loginAdmin', username: 'admin-root', password: 'root-secret'});
+const beforeInvalid = JSON.stringify(rowsBySheet.ListNilai);
+assert.equal(post({action:'updateNilaiByUsernameMateri', username:'student-x', id_materi:'MAT-X', nilai:'=1+1', token:rootLogin.token}).status, 'error');
+assert.equal(post({action:'updateNilaiBulk', data:[{username:'student-x',id_materi:'MAT-X',nilai:77},{username:'student-y',id_materi:'MAT-XI',nilai:'=2'}], token:rootLogin.token}).status, 'error');
+assert.equal(JSON.stringify(rowsBySheet.ListNilai), beforeInvalid);
 const changeId = post({
   action: 'updateMateriId',
   rowNumber: 2,
@@ -196,4 +203,41 @@ const changeId = post({
 assert.equal(changeId.status, 'error');
 assert.match(changeId.message, /permanen/);
 
+const appeal = post({action:'submitAppeal', id_materi:'MAT-X', alasan:'Mohon diperiksa', username:'student-y', token:login.token});
+assert.equal(appeal.status, 'success');
+assert.equal(rowsBySheet.bandingNilai[1][1], 'student-x');
+assert.equal(post({action:'submitAppeal', id_materi:'MAT-X', alasan:'Lagi', token:login.token}).status, 'error');
+assert.equal(post({action:'submitAppeal', id_materi:'MAT-XI', alasan:'Tidak milik saya', token:login.token}).status, 'error');
+assert.equal(post({action:'resolveAppeal', id_banding:appeal.id_banding, status:'Diterima', token:login.token}).status, 'error');
+assert.equal(post({action:'getAppeals', token:teacherLogin.token}).appeals.length, 1);
+assert.equal(post({action:'resolveAppeal', id_banding:appeal.id_banding, status:'Ditolak', tanggapan:'Sudah diperiksa', token:teacherLogin.token}).status, 'success');
+assert.equal(post({action:'getAppeals', token:login.token}).appeals[0].status, 'Ditolak');
+assert.equal(post({action:'getAppeals', token:login.token}).appeals[0].nilai_hasil, 80);
+assert.equal(post({action:'resolveAppeal', id_banding:appeal.id_banding, status:'Diterima', token:teacherLogin.token}).status, 'error');
+rowsBySheet.ListNilai[0].push('penilaian_manual', 'penilaianmanual');
+assert.throws(() => context.planAppealMigration_(context.SpreadsheetApp.getActiveSpreadsheet(), false), /duplikat/);
+rowsBySheet.ListNilai[0].splice(-2);
+const secondAppeal = post({action:'submitAppeal', id_materi:'MAT-X', alasan:'Pengajuan kembali', token:login.token});
+assert.equal(secondAppeal.status, 'success');
+assert.equal(post({action:'updateNilaiByUsernameMateri', username:'student-x', id_materi:'MAT-X', nilai:'72', token:teacherLogin.token}).status, 'success');
+assert.equal(rowsBySheet.ListNilai[1][4], 72);
+assert.equal(post({action:'resolveAppeal', id_banding:secondAppeal.id_banding, status:'Diterima', token:teacherLogin.token}).status, 'success');
+const reviewed = post({action:'getAppeals', token:login.token}).appeals[1];
+assert.equal(reviewed.nilai_awal, 80);
+assert.equal(reviewed.nilai_hasil, 72);
+assert.equal(reviewed.diperiksa_oleh, 'teacher-x');
+rowsBySheet.ListNilai[0].push('TYPE');
+rowsBySheet.materi[0].push('tipe_evaluasi');
+rowsBySheet.materi[1].push('Tugas');
+rowsBySheet.materi[2].push('Kuis');
+assert.equal(post({action:'updateNilaiByUsernameMateri', username:'student-x', id_materi:'MAT-X', nilai:72, token:rootLogin.token}).status, 'success');
+assert.equal(rowsBySheet.ListNilai[1][rowsBySheet.ListNilai[0].indexOf('TYPE')], 'Tugas');
+assert.equal(post({action:'updateNilaiByUsernameMateri', username:'student-z', id_materi:'MAT-X', nilai:80, token:rootLogin.token}).status, 'success');
+assert.equal(rowsBySheet.ListNilai.at(-1)[rowsBySheet.ListNilai[0].indexOf('TYPE')], 'Tugas');
+assert.equal(post({action:'updateNilaiBulk', data:[{username:'student-z',id_materi:'MAT-XI',nilai:70}], token:rootLogin.token}).status, 'success');
+assert.equal(rowsBySheet.ListNilai.at(-1)[rowsBySheet.ListNilai[0].indexOf('TYPE')], 'Kuis');
+rowsBySheet.bandingNilai[0].pop();
+assert.equal(context.planAppealMigration_(context.SpreadsheetApp.getActiveSpreadsheet(), false).addOutcome, true);
+context.planAppealMigration_(context.SpreadsheetApp.getActiveSpreadsheet(), true);
+assert.equal(context.planAppealMigration_(context.SpreadsheetApp.getActiveSpreadsheet(), false).addOutcome, false);
 console.log('auth and data-scope checks passed');

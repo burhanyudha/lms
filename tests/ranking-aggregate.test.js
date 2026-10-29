@@ -35,4 +35,14 @@ assert.equal(JSON.stringify(result.map(({username, nilai}) => [username, nilai])
 assert.equal(aggregateRanking([{username: 'a', nama: 'Sama', kelas: 'X'}, {username: 'b', nama: 'Sama', kelas: 'X'}], [], [{nama: 'Sama', kelas: 'X', id_materi: 'M1', nilai: 100}], undefined).length, 0);
 const mapelFiltered = aggregateRanking(students, [{username: 'nisn-1', id_materi: 'M-INF', nilai: 75}, {username: 'nisn-1', id_materi: 'M-OTO', nilai: 95}], [], new Set(['M-INF']));
 assert.equal(mapelFiltered[0].nilai, 75);
+const selectionSource = html.match(/function selectGradeRecord\(records\) \{[\s\S]*?\n    \}/)[0];
+const selectGradeRecord = vm.runInNewContext(`(${selectionSource.replace('function selectGradeRecord', 'function')})`, context);
+const revisions = [{nilai:95}, {nilai:70, penilaian_manual:'ya', feedback:'Diperiksa'}, {nilai:100}];
+assert.equal(selectGradeRecord(revisions).nilai, 70);
+assert.equal(aggregateRanking(students, revisions.map(row => ({...row, username:'nisn-1', id_materi:'M1'})), [], undefined)[0].nilai, 70);
+const studentSource = dashboard.match(/function buildRankingData\(students, scores, tasks(?:, materialIds)?\) \{[\s\S]*?\n    \}/)[0];
+const studentRanking = vm.runInNewContext(`(${studentSource.replace('function buildRankingData', 'function')})`, context);
+assert.equal(studentRanking(students, revisions.map(row => ({...row, username:'nisn-1', id_materi:'M1'})), [], undefined)[0].nilai, 70);
+assert.equal(studentRanking(students, [{username:'nisn-1',id_materi:'M1',nilai:25,TYPE:'Survey'}], [], undefined)[0].nilai, 100);
+assert.equal(studentRanking(students, [{username:'nisn-1',id_materi:'M1',nilai:25,TYPE:'Materi'}], [], undefined).length, 0);
 console.log('ranking aggregation checks passed');

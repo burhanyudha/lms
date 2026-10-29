@@ -12,6 +12,8 @@
   <!-- PWA Handler -->
   <script src="pwa-handler.js"></script>
   <script src="lms-api.js"></script>
+  <script src="task-preview.js?v=3"></script>
+  <script src="score-selection.js?v=1"></script>
 
   <style>
     :root {
@@ -674,6 +676,8 @@
           </div>
         </div>
 
+        <div style="margin-bottom:24px"><h3 style="margin:0 0 12px">Materi Selesai</h3><div id="completedMaterials" class="course-grid">Memuat hasil...</div></div>
+
         <div class="stat-card" style="padding: 0; overflow: hidden; margin-bottom: 24px;">
           <div style="padding: 16px 16px 8px 16px; display: flex; justify-content: space-between; align-items: center;">
             <h3 style="margin: 0; font-size: 1rem; font-weight: 700;">Peringkat Teratas</h3>
@@ -804,6 +808,7 @@
     let allProgresMentah = [];
     let allLogTugasMentah = [];
     let allGuruMentah = [];
+    let studentAppeals = [];
 
     function getTingkat(obj) {
       let t = (obj.tingkat || obj.Tingkat || "").toString().trim().toUpperCase();
@@ -840,12 +845,13 @@
       // Fetch only after the server validates this session.
       try {
         const t = new Date().getTime(); // Cache buster
-        const [resMateri, resListNilai, resUser, resLogTugas, resGuru, rankingResponse] = await Promise.all([
+        const [resMateri, resListNilai, resUser, resLogTugas, resGuru, appealResponse, rankingResponse] = await Promise.all([
           fetch(`${API_URL}?sheet=materi&_t=${t}`),
           fetch(`${API_URL}?sheet=listNilai&_t=${t}`).catch(() => ({ json: async () => [] })),
           fetch(`${API_URL}?sheet=user&_t=${t}`).catch(() => ({ json: async () => [] })),
           fetch(`${API_URL}?sheet=logTugas&_t=${t}`).catch(() => ({ json: async () => [] })),
           fetch(`${API_URL}?sheet=public_guru&_t=${t}`).catch(() => ({ json: async () => [] })),
+          lmsApi.call('getAppeals', {}).then(response => response.json()).catch(() => ({status: "error"})),
           lmsApi.call('getRankingData', {}).then(response => response.json()).catch(error => {
             console.error("Gagal memuat data peringkat", error);
             return {status: "error"};
@@ -866,6 +872,8 @@
         allProgresMentah = dataListNilai;
         allLogTugasMentah = dataLogTugas;
         allGuruMentah = dataGuru;
+        studentAppeals = appealResponse.status === "success" ? appealResponse.appeals : [];
+        renderCompletedMaterials(dataMateri, dataListNilai, dataLogTugas);
 
         // Re-render with fresh data silently
         renderMateri(allMateriMentah, allProgresMentah, allLogTugasMentah, allGuruMentah);
@@ -881,6 +889,77 @@
         syncStatus.innerHTML = `<i data-lucide="wifi-off" style="width:12px; height:12px; color:#ef4444;"></i> <span style="color:#ef4444;">Offline</span>`;
         lucide.createIcons();
       }
+    }
+
+    function renderCompletedMaterials(materials, scores, tasks) {
+      const container = document.getElementById('completedMaterials');
+      container.replaceChildren();
+      const grouped = new Map();
+      (Array.isArray(scores) ? scores : []).forEach(row => {
+        if (String(getVal(row, ['username', 'nisn', 'nis']) || '').trim().toLowerCase() !== String(user.username).trim().toLowerCase()) return;
+        const id = String(getVal(row, ['id_materi', 'idmateri', 'modul']) || '').trim();
+        const raw = getVal(row, ['nilai', 'skor', 'point']);
+        if (!id || raw === undefined || String(raw).trim() === '' || !Number.isFinite(Number(raw))) return;
+        if (!grouped.has(id)) grouped.set(id, []);
+        grouped.get(id).push(row);
+      });
+      const best = new Map([...grouped].map(([id, rows]) => [id, selectScoreRecord(rows)]));
+      (Array.isArray(materials) ? materials : []).forEach(material => {
+        const id = String(getVal(material, ['id_materi', 'idmateri', 'materiid', 'id']) || '').trim();
+        const score = best.get(id);
+        if (!score) return;
+        const card = document.createElement('article');
+        card.className = 'course-card';
+        card.style.padding = '16px';
+        const title = document.createElement('h4');
+        title.style.margin = '0 0 8px';
+        title.textContent = getVal(material, ['judul', 'materi', 'namamateri']) || 'Materi';
+        const grade = document.createElement('p');
+        grade.textContent = `Nilai: ${getVal(score, ['nilai', 'skor', 'point'])}`;
+        const feedback = document.createElement('p');
+        feedback.style.cssText = 'white-space:pre-wrap; overflow-wrap:anywhere; color:var(--text-muted);';
+        feedback.textContent = `Feedback: ${getVal(score, ['feedback']) || 'Belum ada feedback.'}`;
+        card.append(title, grade, feedback);
+        const task = findStudentTaskUpload(tasks, user, id, (row, student) => String(getVal(row, ['username', 'nisn', 'nis']) || '').trim().toLowerCase() === String(student.username).trim().toLowerCase());
+        const preview = task && getDrivePreviewUrl(getVal(task, ['link_tugas', 'file', 'url_file', 'link']));
+        if (preview) {
+          const button = document.createElement('button');
+          button.className = 'btn-action'; button.type = 'button'; button.textContent = 'Preview Tugas';
+          button.addEventListener('click', () => openViewModal(preview));
+          card.append(button);
+        }
+        const appeals = studentAppeals.filter(row => String(row.id_materi).trim() === id);
+        const latest = appeals[appeals.length - 1];
+        if (latest) {
+          const state = document.createElement('p');
+          state.textContent = `Banding: ${latest.status}${latest.tanggapan ? ' — ' + latest.tanggapan : ''}`;
+          state.style.overflowWrap = 'anywhere'; card.append(state);
+        }
+        const active = appeals.some(row => ['Menunggu', 'Diproses'].includes(row.status));
+        const form = document.createElement('form');
+        form.style.cssText = 'display:grid;gap:8px;margin-top:10px';
+        const reason = document.createElement('textarea');
+        reason.placeholder = 'Alasan mengajukan banding'; reason.setAttribute('aria-label', `Alasan banding ${title.textContent}`); reason.required = true; reason.maxLength = 1000;
+        reason.style.cssText = 'width:100%;padding:8px;border:1px solid var(--border-color);border-radius:8px;font:inherit';
+        const submit = document.createElement('button');
+        submit.type = 'submit'; submit.className = 'btn-action'; submit.textContent = active ? 'Banding sedang diproses' : 'Ajukan Banding'; submit.disabled = active;
+        reason.disabled = active;
+        form.append(reason, submit);
+        form.addEventListener('submit', async event => {
+          event.preventDefault();
+          const alasan = reason.value.trim();
+          if (!alasan) { alert('Isi alasan banding terlebih dahulu.'); return; }
+          submit.disabled = true;
+          try {
+            const result = await (await lmsApi.call('submitAppeal', {id_materi: id, alasan})).json();
+            if (result.status !== 'success') throw new Error(result.message || 'Banding gagal dikirim.');
+            await loadAllData();
+            alert('Banding berhasil dikirim.');
+          } catch (error) { alert(error.message || 'Banding gagal dikirim.'); submit.disabled = false; }
+        });
+        card.append(form); container.append(card);
+      });
+      if (!container.children.length) container.textContent = 'Belum ada materi yang dinilai.';
     }
 
     function toggleDropdown() { document.getElementById('profile-dropdown').classList.toggle('active'); }
@@ -980,7 +1059,7 @@
               let rMid = t.idmateri || t.id_materi || t.id || "";
               if (rMid) {
                 let url = t.link_tugas || t.linktugas || t.url_file || t.urlfile || t.link || t['link tugas'] || t['url file'] || t.file || "";
-                if (url) taskUrls.set(rMid.toString(), url);
+                taskUrls.set(rMid.toString(), url);
               }
             }
           });
@@ -991,13 +1070,26 @@
         const quizTimes = new Map();
         const quizRawScores = new Map();
 
+        const manualScores = new Map();
+        userProgress.forEach(p => {
+          const id = String(getVal(p, ['id_materi', 'idmateri', 'materi', 'modul', 'id']) || '').trim();
+          if (!id) return;
+          if (!manualScores.has(id)) manualScores.set(id, []);
+          manualScores.get(id).push(p);
+        });
+        manualScores.forEach((rows, id) => {
+          const chosen = selectScoreRecord(rows);
+          if (chosen && String(chosen.penilaian_manual || '').trim().toLowerCase() === 'ya') manualScores.set(id, chosen);
+          else manualScores.delete(id);
+        });
         userProgress.filter(p => {
-          let pTipe = getVal(p, ['tipe', 'tipeevaluasi', 'jenis']);
-          return pTipe && pTipe.toString().toLowerCase() !== "materi";
+          let pTipe = getVal(p, ['tipe', 'type', 'tipeevaluasi', 'jenis']);
+          return !pTipe || pTipe.toString().toLowerCase() !== "materi";
         }).forEach(p => {
           let mid = getVal(p, ['id_materi', 'idmateri', 'materi', 'modul', 'id']);
           if (mid) {
             mid = mid.toString();
+            if (manualScores.has(mid) && manualScores.get(mid) !== p) return;
             let pNilai = getVal(p, ['nilai', 'skor', 'point']);
 
             // Jika kolom nilai kosong (misal guru baru copy-paste nama siswa tapi belum memasukkan nilai), abaikan baris ini
@@ -1007,7 +1099,7 @@
 
             const rawVal = pNilai.toString();
             let score = parseInt(pNilai) || 0;
-            const pTipe = (getVal(p, ['tipe']) || "").toString().trim().toLowerCase();
+            const pTipe = (getVal(p, ['tipe', 'type', 'tipeevaluasi', 'jenis']) || "").toString().trim().toLowerCase();
             if (pTipe === "survey") {
                 score = 100;
             }
@@ -1293,7 +1385,7 @@
       const counts = new Map();
       users.forEach(s => { const key = `${norm(s.nama)}\u0000${norm(s.kelas)}`; if (key !== '\u0000') counts.set(key, (counts.get(key) || 0) + 1); });
       [...(scores || []), ...(tasks || [])].forEach(record => {
-        const type = (record.tipe || record.tipeevaluasi || record.jenis || '').toString().toLowerCase();
+        const type = (record.tipe || record.type || record.TYPE || record.tipeevaluasi || record.jenis || '').toString().toLowerCase();
         if (type === 'materi') return;
         const identity = norm(record.username || record.nisn || record.nis);
         let student = [...users.values()].find(s => identity && norm(s.username) === identity);
@@ -1306,7 +1398,8 @@
         const score = Number.parseInt(rawScore, 10); if (Number.isNaN(score)) return;
         const waktuSec = parseTimeToSeconds(record.waktu);
         const old = student.quizzes.get(id);
-        if (!old || score > old.score || (score === old.score && waktuSec < old.waktuSec)) student.quizzes.set(id, {score, waktuSec});
+        const manual = String(record.penilaian_manual || record.penilaianmanual || '').trim().toLowerCase() === 'ya';
+        if (!old || manual || (!old.manual && (score > old.score || (score === old.score && waktuSec < old.waktuSec)))) student.quizzes.set(id, {score, waktuSec, manual});
       });
       return [...users.values()].filter(s => s.quizzes.size).map(s => ({username: s.username, nama: s.nama, kelas: s.kelas,
         nilai: [...s.quizzes.values()].reduce((sum, q) => sum + q.score, 0), waktuSec: [...s.quizzes.values()].reduce((sum, q) => sum + q.waktuSec, 0)

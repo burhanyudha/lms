@@ -33,6 +33,8 @@ const student = {username: 'NISN-1', nama: 'Siswa Satu', kelas: 'X TKR 4'};
 const upload = {username: 'legacy-user', nama: 'SISWA SATU', kelas: 'X-TKR-4', id_materi: 'INF-01', link_tugas: 'drive-file'};
 const matchesStudent = createRekapRecordMatcher([student]);
 assert.equal(findStudentTaskUpload([upload], student, 'INF-01', matchesStudent), upload);
+const newerUpload = {...upload, link_tugas: 'new-file'};
+assert.equal(findStudentTaskUpload([upload, newerUpload], student, 'INF-01', matchesStudent), newerUpload);
 assert.equal(findStudentTaskUpload([upload], student, 'INF-02', matchesStudent), null);
 assert.equal(
   findStudentTaskUpload([upload], student, 'INF-01', createRekapRecordMatcher([student, {...student, username: 'NISN-2'}])),

@@ -31,6 +31,13 @@ function getSheet_(ss, name) {
   return ss.getSheets().find(function(sheet) { return sheet.getName().toLowerCase() === wanted; }) || null;
 }
 
+function materialEvaluationType_(ss, id) {
+  var material = rowObjects_(getSheet_(ss, 'materi')).find(function(row) {
+    return String(row.id_materi || row.idmateri || '').trim() === String(id || '').trim();
+  });
+  return material ? (material.tipe_evaluasi || material.tipeevaluasi || material.tipe || material.type || material.jenis || 'Kuis') : 'Kuis';
+}
+
 function getMaxUploadBytes_(settingsSheet) {
   var maxBytes = 5 * 1024 * 1024;
   if (!settingsSheet || settingsSheet.getLastRow() < 2) return maxBytes;
@@ -433,7 +440,7 @@ function getRankingData_(ss, principal) {
       if (key !== "\u0000" && byNameClass[key] === 1) student = students.map(function(candidate) { return byIdentity[(candidate.username || candidate.nisn || candidate.nis || "").toString().trim().toLowerCase()]; }).find(function(candidate) { return candidate && (candidate.nama || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "\u0000" + candidate.kelas.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") === key; });
     }
     if (!student) return result;
-    var value = {username: student.username, nama: student.nama, kelas: student.kelas, id_materi: id, nilai: row.nilai != null ? row.nilai : row.skor != null ? row.skor : row.point || "", waktu: row.waktu || "", tipe: row.tipe || row.tipeevaluasi || row.jenis || ""};
+    var value = {username: student.username, nama: student.nama, kelas: student.kelas, id_materi: id, nilai: row.nilai != null ? row.nilai : row.skor != null ? row.skor : row.point || "", waktu: row.waktu || "", tipe: row.tipe || row.type || row.tipeevaluasi || row.jenis || "", penilaian_manual: row.penilaian_manual || row.penilaianmanual || ""};
     result.push(value);
     return result;
   }, []); };
@@ -510,6 +517,10 @@ function doPost(e) {
   if (!principal) return jsonResponse_({status: "error", code: "UNAUTHORIZED", message: "Sesi tidak valid atau sudah berakhir. Silakan login kembali."});
   if (action === "sessionInfo") return jsonResponse_({status: "success", user: principal});
   if (action === "getRankingData") return jsonResponse_(getRankingData_(ss, principal));
+  if (["getAppeals", "submitAppeal", "resolveAppeal"].indexOf(action) !== -1) {
+    try { return jsonResponse_(handleAppeal_(ss, principal, action, postData)); }
+    catch (error) { return jsonResponse_({status: "error", message: error.message}); }
+  }
   if (action === "getData") return jsonResponse_(getSafeSheetData_(ss, sheetName, principal));
   if (!isAuthorizedAction_(principal, action, sheetName)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Akun ini tidak memiliki izin untuk tindakan tersebut."});
   if (action === "saveAttendanceBulk" && !validateAttendanceRequest_(ss, principal, postData.data)) return jsonResponse_({status: "error", code: "FORBIDDEN", message: "Data absensi tidak valid atau di luar kelas/mapel akun ini."});
@@ -653,7 +664,7 @@ function doPost(e) {
         else if (headerName === "nilai" || headerName === "skor") newRow[i] = pData.nilai;
         else if (headerName === "timestamp") newRow[i] = pData.timestamp;
         else if (headerName === "nama") newRow[i] = pData.nama;
-        else if (headerName === "tipe") newRow[i] = pData.tipe;
+        else if (headerName === "tipe" || headerName === "type" || headerName === "jenis") newRow[i] = pData.tipe;
         else if (headerName === "idmateri" || headerName === "id_materi") newRow[i] = pData.id_materi;
         else if (headerName === "waktu") newRow[i] = pData.waktu;
         else if (headerName === "urutansoal" || headerName === "urutan_soal") newRow[i] = pData.urutan_soal;
@@ -1049,20 +1060,24 @@ function doPost(e) {
 
        var targetUser = postData.username;
        var targetMateri = postData.id_materi;
-       var newNilai = postData.nilai;
+       if (!validManualGrade_(postData.nilai)) throw new Error('Nilai harus berupa angka.');
+       var newNilai = Number(postData.nilai);
        var newWaktu = postData.waktu; // Durasi baru
        var targetNama = postData.nama || "";
        var targetKelas = postData.kelas || "";
 
        var sheetData = sheetNilai.getDataRange().getValues();
        var headers = sheetData[0];
-       var userCol = -1, materiCol = -1, nilaiCol = -1, waktuCol = -1, namaCol = -1, kelasCol = -1;
+       var userCol = -1, materiCol = -1, nilaiCol = -1, waktuCol = -1, namaCol = -1, kelasCol = -1, feedbackCol = -1, manualCol = -1, typeCol = -1;
 
        for(var i = 0; i < headers.length; i++){
           var h = headers[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
           if(h === "username" || h === "nisn" || h === "nis") userCol = i;
           if(h === "id_materi" || h === "idmateri" || h === "modul") materiCol = i;
           if(h === "nilai" || h === "skor") nilaiCol = i;
+          if(h === "feedback") feedbackCol = i;
+          if(h === "penilaianmanual") manualCol = i;
+          if(h === "tipe" || h === "type" || h === "jenis") typeCol = i;
           if(h === "waktu" || h === "durasi") waktuCol = i;
           if(h === "nama" || h === "namasiswa" || h === "namalengkap") namaCol = i;
           if(h === "kelas" || h === "tingkat") kelasCol = i;
@@ -1072,6 +1087,7 @@ function doPost(e) {
          throw new Error("Struktur kolom listNilai tidak lengkap (butuh username, id_materi, nilai)");
        }
 
+       if (typeof postData.feedback !== "undefined" && feedbackCol === -1) throw new Error("Kolom feedback belum tersedia.");
        var updated = false;
        for(var j = sheetData.length - 1; j > 0; j--) {
           var rowUsername = sheetData[j][userCol].toString().trim();
@@ -1079,6 +1095,9 @@ function doPost(e) {
 
           if(rowUsername === targetUser && rowMateri === targetMateri) {
              sheetNilai.getRange(j + 1, nilaiCol + 1).setValue(newNilai);
+             if (manualCol !== -1) sheetNilai.getRange(j + 1, manualCol + 1).setValue("ya");
+             if (typeCol !== -1 && !sheetData[j][typeCol]) sheetNilai.getRange(j + 1, typeCol + 1).setValue(materialEvaluationType_(ss, targetMateri));
+             if (feedbackCol !== -1 && typeof postData.feedback !== "undefined") sheetNilai.getRange(j + 1, feedbackCol + 1).setValue(safeSheetText_(postData.feedback));
              if (waktuCol !== -1 && newWaktu !== undefined) {
                  sheetNilai.getRange(j + 1, waktuCol + 1).setValue(newWaktu);
              }
@@ -1112,6 +1131,8 @@ function doPost(e) {
          newRow[userCol] = targetUser;
          newRow[materiCol] = targetMateri;
          newRow[nilaiCol] = newNilai;
+         if (manualCol !== -1) newRow[manualCol] = "ya";
+         if (feedbackCol !== -1 && typeof postData.feedback !== "undefined") newRow[feedbackCol] = safeSheetText_(postData.feedback);
          if(namaCol !== -1) newRow[namaCol] = targetNama;
          if(kelasCol !== -1) newRow[kelasCol] = targetKelas;
 
@@ -1124,7 +1145,7 @@ function doPost(e) {
            if (waktuCol !== -1 && i === waktuCol && newWaktu !== undefined) {
               newRow[i] = newWaktu;
            }
-           if(h === "tipe" || h === "jenis") newRow[i] = "Kuis";
+           if(h === "tipe" || h === "type" || h === "jenis") newRow[i] = materialEvaluationType_(ss, targetMateri);
          }
          sheetNilai.appendRow(newRow);
          return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Nilai baru berhasil ditambahkan" }))
@@ -1137,16 +1158,20 @@ function doPost(e) {
 
          var bulkData = postData.data; // Array of objects
          if(!bulkData || !Array.isArray(bulkData)) throw new Error("Format data bulk tidak valid");
+         if (bulkData.some(function(row) { return !row || !validManualGrade_(row.nilai); })) throw new Error('Nilai harus berupa angka.');
 
          var sheetData = sheetNilai.getDataRange().getValues();
          var headers = sheetData[0];
-         var userCol = -1, materiCol = -1, nilaiCol = -1, waktuCol = -1, namaCol = -1, kelasCol = -1;
+         var userCol = -1, materiCol = -1, nilaiCol = -1, waktuCol = -1, namaCol = -1, kelasCol = -1, feedbackCol = -1, manualCol = -1, typeCol = -1;
 
          for(var i = 0; i < headers.length; i++){
             var h = headers[i].toString().toLowerCase().replace(/[^a-z0-9]/g, '');
             if(h === "username" || h === "nisn" || h === "nis") userCol = i;
             if(h === "id_materi" || h === "idmateri" || h === "modul") materiCol = i;
             if(h === "nilai" || h === "skor") nilaiCol = i;
+          if(h === "feedback") feedbackCol = i;
+          if(h === "penilaianmanual") manualCol = i;
+            if(h === "tipe" || h === "type" || h === "jenis") typeCol = i;
             if(h === "waktu" || h === "durasi") waktuCol = i;
             if(h === "nama" || h === "namasiswa" || h === "namalengkap") namaCol = i;
             if(h === "kelas" || h === "tingkat") kelasCol = i;
@@ -1156,13 +1181,14 @@ function doPost(e) {
            throw new Error("Struktur kolom listNilai tidak lengkap (butuh username, id_materi, nilai)");
          }
 
+         if (feedbackCol === -1 && bulkData.some(function(row) { return typeof row.feedback !== "undefined"; })) throw new Error("Kolom feedback belum tersedia.");
          var newRows = [];
 
          for (var d = 0; d < bulkData.length; d++) {
              var item = bulkData[d];
              var targetUser = item.username;
              var targetMateri = item.id_materi;
-             var newNilai = item.nilai;
+             var newNilai = Number(item.nilai);
              var newWaktu = item.waktu;
              var targetNama = item.nama || "";
              var targetKelas = item.kelas || "";
@@ -1174,6 +1200,9 @@ function doPost(e) {
 
                 if(rowUsername === targetUser && rowMateri === targetMateri) {
                    sheetNilai.getRange(j + 1, nilaiCol + 1).setValue(newNilai);
+             if (manualCol !== -1) sheetNilai.getRange(j + 1, manualCol + 1).setValue("ya");
+                   if (typeCol !== -1 && !sheetData[j][typeCol]) sheetNilai.getRange(j + 1, typeCol + 1).setValue(materialEvaluationType_(ss, targetMateri));
+             if (feedbackCol !== -1 && typeof item.feedback !== "undefined") sheetNilai.getRange(j + 1, feedbackCol + 1).setValue(safeSheetText_(item.feedback));
                    if (waktuCol !== -1 && newWaktu !== undefined) {
                        sheetNilai.getRange(j + 1, waktuCol + 1).setValue(newWaktu);
                    }
@@ -1203,6 +1232,8 @@ function doPost(e) {
                  newRow[userCol] = targetUser;
                  newRow[materiCol] = targetMateri;
                  newRow[nilaiCol] = newNilai;
+         if (manualCol !== -1) newRow[manualCol] = "ya";
+         if (feedbackCol !== -1 && typeof item.feedback !== "undefined") newRow[feedbackCol] = safeSheetText_(item.feedback);
                  if(namaCol !== -1) newRow[namaCol] = targetNama;
                  if(kelasCol !== -1) newRow[kelasCol] = targetKelas;
 
@@ -1215,7 +1246,7 @@ function doPost(e) {
                    if (waktuCol !== -1 && i === waktuCol && newWaktu !== undefined) {
                       newRow[i] = newWaktu;
                    }
-                   if(h === "tipe" || h === "jenis") newRow[i] = "Kuis";
+                   if(h === "tipe" || h === "type" || h === "jenis") newRow[i] = materialEvaluationType_(ss, targetMateri);
                  }
                  newRows.push(newRow);
              }

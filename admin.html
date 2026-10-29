@@ -146,6 +146,13 @@
     .form-group { display: flex; flex-direction: column; gap: 6px; }
     .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
     .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }
+    .appeal-review-modal { max-width: 860px; }
+    .appeal-review-summary { padding:12px 14px; border:1px solid #dbeafe; border-radius:10px; background:#eff6ff; color:#1e3a8a; }
+    .appeal-review-reason { padding:12px 14px; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
+    .appeal-review-reason p { margin:6px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; color:#334155; }
+    .appeal-preview-frame { width:100%; height:38vh; min-height:220px; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
+    .appeal-review-fields { display:grid; grid-template-columns:minmax(130px,.35fr) minmax(0,1fr); gap:12px; }
+    @media (max-width:640px) { .appeal-review-fields { grid-template-columns:1fr; } .appeal-review-modal .modal-body { padding:14px; } .appeal-review-modal .modal-footer { flex-direction:column-reverse; } .appeal-review-modal .modal-footer button { width:100%; } }
 
     /* ACTION BUTTONS IN TABLE */
     .action-group { display: flex; gap: 8px; }
@@ -869,12 +876,31 @@
   </div>
 
   <div id="appealActionModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="appealActionTitle">
-    <div class="modal">
+    <div class="modal appeal-review-modal">
       <div class="modal-header">
-        <h3 id="appealActionTitle">Tindak lanjuti banding</h3>
+        <div><h3 id="appealActionTitle">Tinjau banding nilai</h3><small style="color:var(--text-muted);">Periksa tugas, nilai, feedback, dan keputusan dalam satu tempat.</small></div>
         <button type="button" class="close-modal" aria-label="Tutup" onclick="closeModal('appealActionModal')"><i data-lucide="x"></i></button>
       </div>
       <div class="modal-body">
+        <div id="appealActionSummary" class="appeal-review-summary"></div>
+        <div class="appeal-review-reason"><strong>Alasan banding siswa</strong><p id="appealActionReason"></p></div>
+        <div class="form-group" style="gap:8px;">
+          <label>Preview tugas yang dinilai</label>
+          <iframe id="appealActionPreview" class="appeal-preview-frame" title="Preview tugas siswa" style="display:none" loading="lazy"></iframe>
+          <p id="appealActionNoPreview" style="margin:0;color:var(--text-muted);">Tidak ada file tugas untuk materi ini.</p>
+          <a id="appealActionOpenFile" href="#" target="_blank" rel="noopener noreferrer" style="display:none;color:var(--primary);">Buka tugas di tab baru</a>
+        </div>
+        <div class="appeal-review-fields">
+          <div class="form-group">
+            <label for="appealActionGrade">Nilai baru</label>
+            <input id="appealActionGrade" class="form-control" type="number" step="any" inputmode="decimal" aria-describedby="appealGradeHint">
+            <small id="appealGradeHint" style="color:var(--text-muted);">Nilai awal banding akan terisi. Perubahan nilai/feedback hanya diterapkan jika keputusan Diterima.</small>
+          </div>
+          <div class="form-group">
+            <label for="appealActionFeedback">Feedback untuk siswa</label>
+            <textarea id="appealActionFeedback" class="form-control" rows="3" maxlength="2000" placeholder="Tulis feedback atau alasan perubahan nilai"></textarea>
+          </div>
+        </div>
         <div class="form-group">
           <label for="appealActionStatus">Keputusan</label>
           <select id="appealActionStatus" class="form-control" required>
@@ -885,10 +911,11 @@
           </select>
         </div>
         <div class="form-group">
-          <label for="appealActionResponse">Tanggapan untuk siswa</label>
-          <textarea id="appealActionResponse" class="form-control" rows="4" maxlength="2000" placeholder="Jelaskan hasil peninjauan (opsional)"></textarea>
+          <label for="appealActionResponse">Tanggapan keputusan</label>
+          <textarea id="appealActionResponse" class="form-control" rows="2" maxlength="2000" placeholder="Tanggapan yang akan dilihat siswa (opsional)"></textarea>
         </div>
-        <p id="appealActionHint" style="display:none;margin:0;color:var(--text-muted);font-size:0.85rem;">Jika nilai perlu diubah, simpan nilai baru di menu Input Nilai sebelum menerima banding.</p>
+        <small id="appealActionHint" style="color:var(--text-muted);"></small>
+        <small id="appealActionSaveStatus" role="status" aria-live="polite" style="color:#475569;"></small>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal('appealActionModal')">Batal</button>
@@ -1337,32 +1364,107 @@
       list.querySelectorAll('[data-appeal-id]').forEach(button => button.addEventListener('click', () => tindakBanding(button.dataset.appealId)));
     }
     async function tindakBanding(id) {
+      const appeal = dataBanding.find(item => String(item.id_banding) === String(id));
+      if (!appeal) return;
       currentAppealActionId = id;
       document.getElementById('appealActionStatus').value = '';
       document.getElementById('appealActionResponse').value = '';
-      document.getElementById('appealActionHint').style.display = 'none';
+      document.getElementById('appealActionHint').textContent = 'Nilai dan feedback hanya disimpan jika keputusan banding Diterima.';
+      document.getElementById('appealActionSummary').textContent = `${appeal.nama || 'Siswa'} • ${appeal.kelas || ''} • ${appeal.id_materi || ''} • Nilai saat diajukan: ${appeal.nilai_awal ?? '-'}`;
+      document.getElementById('appealActionReason').textContent = appeal.alasan || 'Tidak ada alasan tertulis.';
+      document.getElementById('appealActionStatus').setAttribute('aria-invalid', 'false');
+      document.getElementById('appealActionResponse').value = appeal.tanggapan || '';
+      document.getElementById('appealActionHint').textContent = 'Pilih Diterima untuk menerapkan nilai baru dan feedback. Untuk Diproses atau Ditolak, perubahan pada kedua kolom itu tidak akan disimpan.';
+      document.getElementById('saveAppealAction').textContent = 'Simpan tindak lanjut';
+      document.getElementById('appealActionSaveStatus').textContent = '';
+
+      const student = {username:appeal.username, nama:appeal.nama, kelas:appeal.kelas};
+      const matcher = createRekapRecordMatcher(dataUser);
+      const materialId = String(appeal.id_materi || '').trim();
+      const material = dataMateri.find(item => String(getVal(item, ['id_materi', 'idmateri', 'id']) || '').trim() === materialId);
+      const matchingScores = dataNilai.filter(row => matchesAppealStudent(row, student, matcher) && String(getVal(row, ['id_materi', 'idmateri', 'modul']) || '').trim() === materialId);
+      const gradeRecord = selectGradeRecord(matchingScores);
+      const gradeInput = document.getElementById('appealActionGrade');
+      const feedbackInput = document.getElementById('appealActionFeedback');
+      gradeInput.value = gradeRecord ? getVal(gradeRecord, ['nilai', 'skor', 'point']) : (appeal.nilai_awal ?? '');
+      feedbackInput.value = gradeRecord ? (getVal(gradeRecord, ['feedback']) || '') : '';
+      gradeInput.dataset.originalValue = gradeInput.value;
+      feedbackInput.dataset.originalValue = feedbackInput.value;
+
+      const task = findStudentTaskUpload(dataLogTugas, student, materialId, matcher);
+      const rawFileUrl = task && getVal(task, ['link_tugas', 'file', 'url_file', 'link']);
+      const previewUrl = getDrivePreviewUrl(rawFileUrl);
+      const frame = document.getElementById('appealActionPreview');
+      const noPreview = document.getElementById('appealActionNoPreview');
+      const openFile = document.getElementById('appealActionOpenFile');
+      frame.src = previewUrl || 'about:blank';
+      frame.style.display = previewUrl ? 'block' : 'none';
+      noPreview.style.display = previewUrl ? 'none' : 'block';
+      openFile.href = previewUrl || '';
+      openFile.style.display = previewUrl ? 'inline-block' : 'none';
+      document.getElementById('appealActionTitle').textContent = `Tinjau banding — ${getVal(material || {}, ['judul', 'materi']) || materialId}`;
       openModal('appealActionModal');
     }
     document.getElementById('appealActionStatus').addEventListener('change', function() {
-      document.getElementById('appealActionHint').style.display = this.value === 'Diterima' ? 'block' : 'none';
+      document.getElementById('appealActionStatus').setAttribute('aria-invalid', 'false');
+      document.getElementById('appealActionSaveStatus').textContent = '';
+      document.getElementById('appealActionHint').textContent = this.value === 'Diterima'
+        ? 'Nilai dan feedback di atas akan disimpan sebelum banding ditandai Diterima.'
+        : 'Pilih Diterima untuk menerapkan nilai baru dan feedback. Untuk Diproses atau Ditolak, perubahan pada kedua kolom itu tidak akan disimpan.';
     });
+    function matchesAppealStudent(record, student, matcher) {
+      return matcher(record, student);
+    }
     async function simpanTindakBanding() {
       const status = document.getElementById('appealActionStatus').value;
       const tanggapan = document.getElementById('appealActionResponse').value.trim();
+      const saveStatus = document.getElementById('appealActionSaveStatus');
+      const appeal = dataBanding.find(item => String(item.id_banding) === String(currentAppealActionId));
+      const gradeInput = document.getElementById('appealActionGrade');
+      const feedbackInput = document.getElementById('appealActionFeedback');
       if (!currentAppealActionId || !['Diproses', 'Diterima', 'Ditolak'].includes(status)) {
-        return alert('Pilih status tindak lanjut terlebih dahulu.');
+        document.getElementById('appealActionStatus').setAttribute('aria-invalid', 'true');
+        saveStatus.textContent = 'Pilih status tindak lanjut terlebih dahulu.';
+        return;
       }
-      if (status === 'Diterima' && !confirm('Jika nilai perlu diubah, simpan nilai baru di Input Nilai sebelum memutuskan banding. Lanjutkan keputusan sekarang?')) return;
+      if (!appeal) {
+        saveStatus.textContent = 'Data banding tidak ditemukan. Tutup dialog lalu muat ulang daftar banding.';
+        return;
+      }
+      if (status === 'Diterima' && (!gradeInput.value.trim() || !Number.isFinite(Number(gradeInput.value)))) {
+        saveStatus.textContent = 'Masukkan nilai berupa angka sebelum menerima banding.';
+        gradeInput.focus();
+        return;
+      }
+      if (status !== 'Diterima' && (gradeInput.value !== gradeInput.dataset.originalValue || feedbackInput.value !== feedbackInput.dataset.originalValue)) {
+        saveStatus.textContent = 'Pilih Diterima untuk menyimpan perubahan nilai atau feedback.';
+        return;
+      }
       const button = document.getElementById('saveAppealAction');
       button.disabled = true;
+      button.innerHTML = '<i data-lucide="loader-circle" class="spin-anim" style="width:16px;height:16px;"></i> Menyimpan…';
+      lucide.createIcons();
       try {
-        const result = await (await lmsApi.call('resolveAppeal', {id_banding:currentAppealActionId, status, tanggapan})).json();
+        saveStatus.textContent = status === 'Diterima' ? 'Menyimpan nilai, feedback, dan keputusan…' : 'Menyimpan keputusan banding…';
+        const result = await (await lmsApi.call('resolveAppeal', {
+          id_banding: currentAppealActionId,
+          status,
+          tanggapan,
+          ...(status === 'Diterima' ? {nilai:gradeInput.value.trim(), feedback:feedbackInput.value} : {})
+        })).json();
         if (result.status !== 'success') throw new Error(result.message || 'Gagal menyimpan banding');
         closeModal('appealActionModal');
         currentAppealActionId = '';
-        await loadBanding();
-      } catch (error) { alert(error.message || 'Gagal menyimpan tindak lanjut banding.'); }
-      finally { button.disabled = false; }
+        await Promise.all([
+          loadBanding(),
+          fetch(`${API_URL}?sheet=listNilai&_t=${Date.now()}`).then(response => response.json()).then(rows => { if (Array.isArray(rows)) dataNilai = rows; }).catch(error => console.error('Gagal menyegarkan daftar nilai', error))
+        ]);
+      } catch (error) {
+        saveStatus.textContent = error.message || 'Gagal menyimpan tindak lanjut banding. Coba lagi.';
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Simpan tindak lanjut';
+      }
     }
     function renderDashboard() {
       // Pastikan memfilter baris yang kosong (Google Sheets sering mengirim baris kosong jika tidak dihapus)

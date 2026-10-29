@@ -24,6 +24,38 @@ function appealScore_(ss, principal, id) {
   return manual.length ? Number(manual[manual.length - 1].nilai !== undefined ? manual[manual.length - 1].nilai : manual[manual.length - 1].skor) : Math.max.apply(null, scores.map(function(r) { return Number(r.nilai !== undefined ? r.nilai : r.skor); }));
 }
 
+function writeAppealGrade_(ss, appeal, grade, feedback) {
+  if (!validManualGrade_(grade)) throw new Error('Nilai harus berupa angka.');
+  var sheet = getSheet_(ss, 'ListNilai');
+  if (!sheet || !sheet.getLastRow()) throw new Error('Tab ListNilai tidak ditemukan.');
+  var values = sheet.getDataRange().getValues();
+  var headers = values[0].map(function(h) { return String(h).trim().toLowerCase().replace(/[^a-z0-9]/g, ''); });
+  var find = function(names) { return headers.findIndex(function(h) { return names.indexOf(h) !== -1; }); };
+  var userCol = find(['username','nisn','nis']), materialCol = find(['idmateri','modul']), gradeCol = find(['nilai','skor']);
+  var feedbackCol = find(['feedback']), manualCol = find(['penilaianmanual']), nameCol = find(['nama','namasiswa','namalengkap']);
+  var classCol = find(['kelas','tingkat']), typeCol = find(['tipe','type','jenis']);
+  if (userCol < 0 || materialCol < 0 || gradeCol < 0 || feedbackCol < 0) throw new Error('Kolom nilai atau feedback belum tersedia.');
+  var targetUser = String(appeal.username || '').trim().toLowerCase();
+  var targetMaterial = String(appeal.id_materi || '').trim();
+  var rowIndex = -1;
+  for (var i = values.length - 1; i > 0; i--) {
+    if (String(values[i][userCol] || '').trim().toLowerCase() === targetUser && String(values[i][materialCol] || '').trim() === targetMaterial) { rowIndex = i; break; }
+  }
+  var row = rowIndex >= 0 ? values[rowIndex].slice() : new Array(headers.length).fill('');
+  row.length = Math.max(row.length, headers.length);
+  row[userCol] = appeal.username;
+  row[materialCol] = targetMaterial;
+  row[gradeCol] = Number(grade);
+  row[feedbackCol] = safeSheetText_(feedback);
+  if (manualCol >= 0) row[manualCol] = 'ya';
+  if (nameCol >= 0) row[nameCol] = appeal.nama || '';
+  if (classCol >= 0) row[classCol] = appeal.kelas || '';
+  if (typeCol >= 0 && !row[typeCol]) row[typeCol] = materialEvaluationType_(ss, targetMaterial);
+  if (rowIndex >= 0) sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([row]);
+  else sheet.appendRow(row);
+  return Number(grade);
+}
+
 function planAppealMigration_(ss, apply) {
   var scores = getSheet_(ss, 'ListNilai');
   if (!scores || !scores.getLastRow()) throw new Error('Tab ListNilai atau header tidak ditemukan.');
@@ -82,14 +114,17 @@ function handleAppeal_(ss, principal, action, payload) {
     if (['Menunggu','Diproses'].indexOf(target.status) < 0) throw new Error('Banding sudah selesai.');
     var status = canonicalAppealStatus_(payload.status), response = String(payload.tanggapan || '').trim();
     if (!status || response.length > 2000) throw new Error('Status atau tanggapan tidak valid.');
+    if (String(payload.feedback || '').length > 2000) throw new Error('Feedback maksimal 2000 karakter.');
     var values = sheet.getDataRange().getValues(), headers = values[0].map(function(h) { return String(h).trim().toLowerCase(); });
     if (headers.indexOf('nilai_hasil') < 0) throw new Error('Kolom nilai_hasil belum disiapkan.');
+    var reviewedGrade = null;
+    if (status === 'Diterima' && typeof payload.nilai !== 'undefined') reviewedGrade = writeAppealGrade_(ss, target, payload.nilai, payload.feedback || '');
     var row = values[target.rowNumber - 1].slice();
     row[headers.indexOf('status')] = status;
     row[headers.indexOf('tanggapan')] = /^[=+\-@]/.test(response) ? "'" + response : response;
     row[headers.indexOf('diperiksa_oleh')] = principal.username;
     row[headers.indexOf('tanggal_diperiksa')] = new Date().toISOString();
-    if (status === 'Diterima' || status === 'Ditolak') row[headers.indexOf('nilai_hasil')] = appealScore_(ss, {accountType:'student',username:target.username}, String(target.id_materi).trim());
+    if (status === 'Diterima' || status === 'Ditolak') row[headers.indexOf('nilai_hasil')] = reviewedGrade !== null ? reviewedGrade : appealScore_(ss, {accountType:'student',username:target.username}, String(target.id_materi).trim());
     sheet.getRange(target.rowNumber, 1, 1, row.length).setValues([row]);
     return {status:'success'};
     } finally { resolveLock.releaseLock(); }

@@ -1159,6 +1159,7 @@
               <form class="appeal-form" data-material-id="${escapeCardText(mid)}" style="display:grid;gap:8px;">
                 <textarea name="alasan" placeholder="Alasan mengajukan banding" aria-label="Alasan banding ${escapeCardText(m.judul || m.Judul || 'materi')}" maxlength="1000" required ${appealActive ? 'disabled' : ''} style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;"></textarea>
                 <button type="submit" class="btn-action" ${appealActive ? 'disabled' : ''}>${appealActive ? 'Banding sedang diproses' : 'Ajukan Banding'}</button>
+                <small class="appeal-submit-status" role="status" aria-live="polite" style="color:#64748b;"></small>
               </form>
             </div>`;
           }
@@ -1256,7 +1257,12 @@
         list.querySelectorAll('.appeal-form').forEach(form => form.addEventListener('submit', async event => {
           event.preventDefault();
           const button = form.querySelector('button[type="submit"]');
+          const status = form.querySelector('.appeal-submit-status');
+          const originalLabel = button.textContent;
           button.disabled = true;
+          button.innerHTML = '<i data-lucide="loader-circle" class="spin-anim" style="width:16px;height:16px;"></i><span>Mengirim banding…</span>';
+          status.textContent = 'Mengirim alasan dan memuat ulang status banding…';
+          lucide.createIcons();
           try {
             const result = await (await lmsApi.call('submitAppeal', {
               id_materi: form.dataset.materialId,
@@ -1264,10 +1270,10 @@
             })).json();
             if (result.status !== 'success') throw new Error(result.message || 'Banding gagal dikirim.');
             await loadAllData();
-            alert('Banding berhasil dikirim.');
           } catch (error) {
-            alert(error.message || 'Banding gagal dikirim.');
+            status.textContent = error.message || 'Banding gagal dikirim. Coba lagi.';
             button.disabled = false;
+            button.textContent = originalLabel;
           }
         }));
 

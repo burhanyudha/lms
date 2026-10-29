@@ -868,6 +868,35 @@
     </div>
   </div>
 
+  <div id="appealActionModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="appealActionTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="appealActionTitle">Tindak lanjuti banding</h3>
+        <button type="button" class="close-modal" aria-label="Tutup" onclick="closeModal('appealActionModal')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="appealActionStatus">Keputusan</label>
+          <select id="appealActionStatus" class="form-control" required>
+            <option value="">Pilih keputusan</option>
+            <option value="Diproses">Diproses</option>
+            <option value="Diterima">Diterima</option>
+            <option value="Ditolak">Ditolak</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="appealActionResponse">Tanggapan untuk siswa</label>
+          <textarea id="appealActionResponse" class="form-control" rows="4" maxlength="2000" placeholder="Jelaskan hasil peninjauan (opsional)"></textarea>
+        </div>
+        <p id="appealActionHint" style="display:none;margin:0;color:var(--text-muted);font-size:0.85rem;">Jika nilai perlu diubah, simpan nilai baru di menu Input Nilai sebelum menerima banding.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('appealActionModal')">Batal</button>
+        <button type="button" id="saveAppealAction" class="btn btn-primary" onclick="simpanTindakBanding()">Simpan tindak lanjut</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ===== CEK LOGIN ADMIN =====
     let IS_SUPER_ADMIN = false;
@@ -924,6 +953,7 @@
     let dataAbsen = [];
     let dataJurnal = [];
     let dataBanding = [];
+    let currentAppealActionId = '';
     let activeFilteredTugas = [];
     let dataSettings = [];
     let dataGuru = [];
@@ -1307,19 +1337,32 @@
       list.querySelectorAll('[data-appeal-id]').forEach(button => button.addEventListener('click', () => tindakBanding(button.dataset.appealId)));
     }
     async function tindakBanding(id) {
-      const statusInput = prompt('Masukkan status: Diproses, Diterima, atau Ditolak');
-      if (statusInput === null) return;
-      const statusValue = statusInput.trim().toLocaleLowerCase('id-ID');
-      const status = statusValue === 'diproses' ? 'Diproses' : statusValue === 'diterima' ? 'Diterima' : statusValue === 'ditolak' ? 'Ditolak' : '';
-      if (!status) return alert('Status tidak valid. Masukkan Diproses, Diterima, atau Ditolak.');
+      currentAppealActionId = id;
+      document.getElementById('appealActionStatus').value = '';
+      document.getElementById('appealActionResponse').value = '';
+      document.getElementById('appealActionHint').style.display = 'none';
+      openModal('appealActionModal');
+    }
+    document.getElementById('appealActionStatus').addEventListener('change', function() {
+      document.getElementById('appealActionHint').style.display = this.value === 'Diterima' ? 'block' : 'none';
+    });
+    async function simpanTindakBanding() {
+      const status = document.getElementById('appealActionStatus').value;
+      const tanggapan = document.getElementById('appealActionResponse').value.trim();
+      if (!currentAppealActionId || !['Diproses', 'Diterima', 'Ditolak'].includes(status)) {
+        return alert('Pilih status tindak lanjut terlebih dahulu.');
+      }
       if (status === 'Diterima' && !confirm('Jika nilai perlu diubah, simpan nilai baru di Input Nilai sebelum memutuskan banding. Lanjutkan keputusan sekarang?')) return;
-      const tanggapan = prompt('Tanggapan untuk siswa:');
-      if (tanggapan === null) return;
+      const button = document.getElementById('saveAppealAction');
+      button.disabled = true;
       try {
-        const result = await (await lmsApi.call('resolveAppeal', {id_banding:id, status, tanggapan})).json();
+        const result = await (await lmsApi.call('resolveAppeal', {id_banding:currentAppealActionId, status, tanggapan})).json();
         if (result.status !== 'success') throw new Error(result.message || 'Gagal menyimpan banding');
+        closeModal('appealActionModal');
+        currentAppealActionId = '';
         await loadBanding();
-      } catch (error) { alert(error.message); }
+      } catch (error) { alert(error.message || 'Gagal menyimpan tindak lanjut banding.'); }
+      finally { button.disabled = false; }
     }
     function renderDashboard() {
       // Pastikan memfilter baris yang kosong (Google Sheets sering mengirim baris kosong jika tidak dihapus)

@@ -117,7 +117,12 @@ assert.equal(studentRanking.students.some(row=>row.username==='student-z'),false
 assert.equal(studentRanking.students.some(row=>row.password),false);
 assert.equal(studentRanking.scores.some(row=>row.password || row.jawaban),false);
 assert.deepEqual(post({action: 'getData', sheet: 'admin', token: login.token}), []);
-assert.deepEqual(post({action: 'getData', sheet: 'ListNilai', token: login.token}).map(row => row.id_materi), ['MAT-X']);
+const studentScores = post({action: 'getData', sheet: 'ListNilai', token: login.token});
+assert.deepEqual(studentScores.map(row => row.id_materi), ['MAT-X', 'MAT-X']);
+assert.equal(studentScores.some(row => row.username === 'old-student-id'), true);
+rowsBySheet.user.push(['student-x-duplicate', 'other-secret', 'Student X', 'X TKR 1']);
+assert.equal(post({action: 'getData', sheet: 'ListNilai', token: login.token}).some(row => row.username === 'old-student-id'), false);
+rowsBySheet.user.pop();
 const questions = post({action: 'getData', sheet: 'soal', token: login.token});
 assert.equal(questions.length, 1);
 assert.equal(questions[0].kunci, undefined);

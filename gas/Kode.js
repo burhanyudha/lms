@@ -303,7 +303,17 @@ function getSafeSheetData_(ss, sheetName, principal) {
   var studentRow = rowObjects_(getSheet_(ss, "user")).find(function(row) { return (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === username; });
   if (sheetName === "user") return studentRow ? [studentRow] : [];
   if (["ListNilai", "listNilai", "logTugas", "logLogin", "sesiKuis"].indexOf(sheetName) !== -1) {
-    return rows.filter(function(row) { return (row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === username; });
+    var ownIdentity = studentRow ? (studentRow.nama || studentRow.namasiswa || studentRow.namalengkap || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "\u0000" + (studentRow.kelas || studentRow.tingkat || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+    var sameIdentityCount = ownIdentity && ownIdentity !== "\u0000" ? rowObjects_(getSheet_(ss, "user")).filter(function(row) {
+      var key = (row.nama || row.namasiswa || row.namalengkap || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "\u0000" + (row.kelas || row.tingkat || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      return key === ownIdentity;
+    }).length : 0;
+    return rows.filter(function(row) {
+      if ((row.username || row.nisn || row.nis || "").toString().trim().toLowerCase() === username) return true;
+      if (sameIdentityCount !== 1) return false;
+      var legacyIdentity = (row.nama || row.namasiswa || row.namalengkap || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "\u0000" + (row.kelas || row.tingkat || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      return legacyIdentity === ownIdentity;
+    });
   }
   if (sheetName === "settings") return rows.filter(function(row) { return (row.key || row.Key || "").toString().toUpperCase() === "MAX_UPLOAD_SIZE"; });
   if (["materi", "soal"].indexOf(sheetName) !== -1) {

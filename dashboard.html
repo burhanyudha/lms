@@ -14,6 +14,7 @@
   <script src="lms-api.js"></script>
   <script src="task-preview.js?v=3"></script>
   <script src="score-selection.js?v=1"></script>
+  <script src="rekap-match.js?v=2"></script>
 
   <style>
     :root {
@@ -802,6 +803,7 @@
     const userData = localStorage.getItem("user");
     if (!userData) { window.location.href = "index.html"; }
     const user = JSON.parse(userData);
+    const matchesStudentRecord = createRekapRecordMatcher([user]);
 
     // Data Penampung Global untuk Filter Mapel
     let allMateriMentah = [];
@@ -896,7 +898,7 @@
       container.replaceChildren();
       const grouped = new Map();
       (Array.isArray(scores) ? scores : []).forEach(row => {
-        if (String(getVal(row, ['username', 'nisn', 'nis']) || '').trim().toLowerCase() !== String(user.username).trim().toLowerCase()) return;
+        if (!matchesStudentRecord(row, user)) return;
         const id = String(getVal(row, ['id_materi', 'idmateri', 'modul']) || '').trim();
         const raw = getVal(row, ['nilai', 'skor', 'point']);
         if (!id || raw === undefined || String(raw).trim() === '' || !Number.isFinite(Number(raw))) return;
@@ -920,7 +922,7 @@
         feedback.style.cssText = 'white-space:pre-wrap; overflow-wrap:anywhere; color:var(--text-muted);';
         feedback.textContent = `Feedback: ${getVal(score, ['feedback']) || 'Belum ada feedback.'}`;
         card.append(title, grade, feedback);
-        const task = findStudentTaskUpload(tasks, user, id, (row, student) => String(getVal(row, ['username', 'nisn', 'nis']) || '').trim().toLowerCase() === String(student.username).trim().toLowerCase());
+        const task = findStudentTaskUpload(tasks, user, id, matchesStudentRecord);
         const preview = task && getDrivePreviewUrl(getVal(task, ['link_tugas', 'file', 'url_file', 'link']));
         if (preview) {
           const button = document.createElement('button');

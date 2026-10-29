@@ -677,8 +677,6 @@
           </div>
         </div>
 
-        <div style="margin-bottom:24px"><h3 style="margin:0 0 12px">Materi Selesai</h3><div id="completedMaterials" class="course-grid">Memuat hasil...</div></div>
-
         <div class="stat-card" style="padding: 0; overflow: hidden; margin-bottom: 24px;">
           <div style="padding: 16px 16px 8px 16px; display: flex; justify-content: space-between; align-items: center;">
             <h3 style="margin: 0; font-size: 1rem; font-weight: 700;">Peringkat Teratas</h3>
@@ -875,8 +873,6 @@
         allLogTugasMentah = dataLogTugas;
         allGuruMentah = dataGuru;
         studentAppeals = appealResponse.status === "success" ? appealResponse.appeals : [];
-        renderCompletedMaterials(dataMateri, dataListNilai, dataLogTugas);
-
         // Re-render with fresh data silently
         renderMateri(allMateriMentah, allProgresMentah, allLogTugasMentah, allGuruMentah);
         if (rankingResponse.status === 'success') renderRanking(rankingResponse.scores, rankingResponse.students, rankingResponse.tasks, rankingResponse.materials);
@@ -891,77 +887,6 @@
         syncStatus.innerHTML = `<i data-lucide="wifi-off" style="width:12px; height:12px; color:#ef4444;"></i> <span style="color:#ef4444;">Offline</span>`;
         lucide.createIcons();
       }
-    }
-
-    function renderCompletedMaterials(materials, scores, tasks) {
-      const container = document.getElementById('completedMaterials');
-      container.replaceChildren();
-      const grouped = new Map();
-      (Array.isArray(scores) ? scores : []).forEach(row => {
-        if (!matchesStudentRecord(row, user)) return;
-        const id = String(getVal(row, ['id_materi', 'idmateri', 'modul']) || '').trim();
-        const raw = getVal(row, ['nilai', 'skor', 'point']);
-        if (!id || raw === undefined || String(raw).trim() === '' || !Number.isFinite(Number(raw))) return;
-        if (!grouped.has(id)) grouped.set(id, []);
-        grouped.get(id).push(row);
-      });
-      const best = new Map([...grouped].map(([id, rows]) => [id, selectScoreRecord(rows)]));
-      (Array.isArray(materials) ? materials : []).forEach(material => {
-        const id = String(getVal(material, ['id_materi', 'idmateri', 'materiid', 'id']) || '').trim();
-        const score = best.get(id);
-        if (!score) return;
-        const card = document.createElement('article');
-        card.className = 'course-card';
-        card.style.padding = '16px';
-        const title = document.createElement('h4');
-        title.style.margin = '0 0 8px';
-        title.textContent = getVal(material, ['judul', 'materi', 'namamateri']) || 'Materi';
-        const grade = document.createElement('p');
-        grade.textContent = `Nilai: ${getVal(score, ['nilai', 'skor', 'point'])}`;
-        const feedback = document.createElement('p');
-        feedback.style.cssText = 'white-space:pre-wrap; overflow-wrap:anywhere; color:var(--text-muted);';
-        feedback.textContent = `Feedback: ${getVal(score, ['feedback']) || 'Belum ada feedback.'}`;
-        card.append(title, grade, feedback);
-        const task = findStudentTaskUpload(tasks, user, id, matchesStudentRecord);
-        const preview = task && getDrivePreviewUrl(getVal(task, ['link_tugas', 'file', 'url_file', 'link']));
-        if (preview) {
-          const button = document.createElement('button');
-          button.className = 'btn-action'; button.type = 'button'; button.textContent = 'Preview Tugas';
-          button.addEventListener('click', () => openViewModal(preview));
-          card.append(button);
-        }
-        const appeals = studentAppeals.filter(row => String(row.id_materi).trim() === id);
-        const latest = appeals[appeals.length - 1];
-        if (latest) {
-          const state = document.createElement('p');
-          state.textContent = `Banding: ${latest.status}${latest.tanggapan ? ' — ' + latest.tanggapan : ''}`;
-          state.style.overflowWrap = 'anywhere'; card.append(state);
-        }
-        const active = appeals.some(row => ['Menunggu', 'Diproses'].includes(row.status));
-        const form = document.createElement('form');
-        form.style.cssText = 'display:grid;gap:8px;margin-top:10px';
-        const reason = document.createElement('textarea');
-        reason.placeholder = 'Alasan mengajukan banding'; reason.setAttribute('aria-label', `Alasan banding ${title.textContent}`); reason.required = true; reason.maxLength = 1000;
-        reason.style.cssText = 'width:100%;padding:8px;border:1px solid var(--border-color);border-radius:8px;font:inherit';
-        const submit = document.createElement('button');
-        submit.type = 'submit'; submit.className = 'btn-action'; submit.textContent = active ? 'Banding sedang diproses' : 'Ajukan Banding'; submit.disabled = active;
-        reason.disabled = active;
-        form.append(reason, submit);
-        form.addEventListener('submit', async event => {
-          event.preventDefault();
-          const alasan = reason.value.trim();
-          if (!alasan) { alert('Isi alasan banding terlebih dahulu.'); return; }
-          submit.disabled = true;
-          try {
-            const result = await (await lmsApi.call('submitAppeal', {id_materi: id, alasan})).json();
-            if (result.status !== 'success') throw new Error(result.message || 'Banding gagal dikirim.');
-            await loadAllData();
-            alert('Banding berhasil dikirim.');
-          } catch (error) { alert(error.message || 'Banding gagal dikirim.'); submit.disabled = false; }
-        });
-        card.append(form); container.append(card);
-      });
-      if (!container.children.length) container.textContent = 'Belum ada materi yang dinilai.';
     }
 
     function toggleDropdown() { document.getElementById('profile-dropdown').classList.toggle('active'); }
@@ -1048,16 +973,13 @@
         renderPengumuman(pengumuman);
 
         // Filter progres hanya untuk user yang sedang login
-        const userProgress = dataProgres.filter(p =>
-          p.username && p.username.toString().trim() === user.username.toString().trim()
-        );
+        const userProgress = dataProgres.filter(p => matchesStudentRecord(p, user));
 
         // Peta URL Tugas dari logTugas (terpisah dari logNilai numerik)
         const taskUrls = new Map();
         if (Array.isArray(dataLogTugas)) {
           dataLogTugas.forEach(t => {
-            let rUser = t.username || t.Username || t.USERNAME || t.nisn || t.NISN || "";
-            if (rUser.toString().trim() === user.username.toString().trim()) {
+            if (matchesStudentRecord(t, user)) {
               let rMid = t.idmateri || t.id_materi || t.id || "";
               if (rMid) {
                 let url = t.link_tugas || t.linktugas || t.url_file || t.urlfile || t.link || t['link tugas'] || t['url file'] || t.file || "";
@@ -1073,12 +995,19 @@
         const quizRawScores = new Map();
 
         const manualScores = new Map();
+        const scoreRecordsByMaterial = new Map();
         userProgress.forEach(p => {
           const id = String(getVal(p, ['id_materi', 'idmateri', 'materi', 'modul', 'id']) || '').trim();
           if (!id) return;
+          const raw = getVal(p, ['nilai', 'skor', 'point']);
+          if (raw !== undefined && raw !== null && String(raw).trim() !== '' && Number.isFinite(Number(raw))) {
+            if (!scoreRecordsByMaterial.has(id)) scoreRecordsByMaterial.set(id, []);
+            scoreRecordsByMaterial.get(id).push(p);
+          }
           if (!manualScores.has(id)) manualScores.set(id, []);
           manualScores.get(id).push(p);
         });
+        scoreRecordsByMaterial.forEach((rows, id) => scoreRecordsByMaterial.set(id, selectScoreRecord(rows)));
         manualScores.forEach((rows, id) => {
           const chosen = selectScoreRecord(rows);
           if (chosen && String(chosen.penilaian_manual || '').trim().toLowerCase() === 'ya') manualScores.set(id, chosen);
@@ -1214,6 +1143,26 @@
           let scoreBadge = hasScore ? `<span style="font-size:0.7rem; font-weight:700; color:#059669; background:#d1fae5; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i data-lucide="check-circle" style="width:14px; height:14px;"></i> Point: ${sVal}</span>` 
             : `<span style="font-size:0.7rem; font-weight:700; color:#94a3b8; background:#f1f5f9; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i data-lucide="circle" style="width:14px; height:14px;"></i> Belum Ada Point</span>`;
 
+          const escapeCardText = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+          const gradedRecord = scoreRecordsByMaterial.get(mid);
+          let gradingDetailsHTML = '';
+          if (gradedRecord) {
+            const grade = getVal(gradedRecord, ['nilai', 'skor', 'point']);
+            const feedbackText = getVal(gradedRecord, ['feedback']);
+            const appeals = studentAppeals.filter(row => String(row.id_materi || '').trim() === mid);
+            const latestAppeal = appeals[appeals.length - 1];
+            const appealActive = appeals.some(row => ['Menunggu', 'Diproses'].includes(String(row.status || '')));
+            gradingDetailsHTML = `<div class="material-grade-details" style="grid-column:1/-1;display:grid;gap:6px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+              <div style="font-weight:700;color:#0f172a;">Nilai: ${escapeCardText(grade)}</div>
+              <div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#64748b;">Feedback: ${escapeCardText(feedbackText || 'Belum ada feedback.')}</div>
+              ${latestAppeal ? `<div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#475569;">Banding: ${escapeCardText(latestAppeal.status)}${latestAppeal.tanggapan ? ` — ${escapeCardText(latestAppeal.tanggapan)}` : ''}</div>` : ''}
+              <form class="appeal-form" data-material-id="${escapeCardText(mid)}" style="display:grid;gap:8px;">
+                <textarea name="alasan" placeholder="Alasan mengajukan banding" aria-label="Alasan banding ${escapeCardText(m.judul || m.Judul || 'materi')}" maxlength="1000" required ${appealActive ? 'disabled' : ''} style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;"></textarea>
+                <button type="submit" class="btn-action" ${appealActive ? 'disabled' : ''}>${appealActive ? 'Banding sedang diproses' : 'Ajukan Banding'}</button>
+              </form>
+            </div>`;
+          }
+
           let timeBadge = '';
           if (hasScore && timeValue) {
             if (!isNaN(timeValue) && timeValue.toString().trim() !== "") {
@@ -1292,6 +1241,7 @@
               ${btnPelajari}
               ${btnKuis}
               ${viewBtnHTML}
+              ${gradingDetailsHTML}
             </div>
           </div>
         `;
@@ -1303,6 +1253,23 @@
 
           return cardHTML;
         }).join('');
+        list.querySelectorAll('.appeal-form').forEach(form => form.addEventListener('submit', async event => {
+          event.preventDefault();
+          const button = form.querySelector('button[type="submit"]');
+          button.disabled = true;
+          try {
+            const result = await (await lmsApi.call('submitAppeal', {
+              id_materi: form.dataset.materialId,
+              alasan: form.elements.alasan.value.trim()
+            })).json();
+            if (result.status !== 'success') throw new Error(result.message || 'Banding gagal dikirim.');
+            await loadAllData();
+            alert('Banding berhasil dikirim.');
+          } catch (error) {
+            alert(error.message || 'Banding gagal dikirim.');
+            button.disabled = false;
+          }
+        }));
 
         const upNextContainer = document.getElementById("upNextContainer");
         const upNextCard = document.getElementById("upNextCard");

@@ -1307,14 +1307,16 @@
       list.querySelectorAll('[data-appeal-id]').forEach(button => button.addEventListener('click', () => tindakBanding(button.dataset.appealId)));
     }
     async function tindakBanding(id) {
-      const status = prompt('Masukkan status: Diproses, Diterima, atau Ditolak');
-      if (status === null) return;
-      if (!['Diproses','Diterima','Ditolak'].includes(status.trim())) return alert('Status tidak valid.');
-      if (status.trim() === 'Diterima' && !confirm('Jika nilai perlu diubah, simpan nilai baru di Input Nilai sebelum memutuskan banding. Lanjutkan keputusan sekarang?')) return;
+      const statusInput = prompt('Masukkan status: Diproses, Diterima, atau Ditolak');
+      if (statusInput === null) return;
+      const statusValue = statusInput.trim().toLocaleLowerCase('id-ID');
+      const status = statusValue === 'diproses' ? 'Diproses' : statusValue === 'diterima' ? 'Diterima' : statusValue === 'ditolak' ? 'Ditolak' : '';
+      if (!status) return alert('Status tidak valid. Masukkan Diproses, Diterima, atau Ditolak.');
+      if (status === 'Diterima' && !confirm('Jika nilai perlu diubah, simpan nilai baru di Input Nilai sebelum memutuskan banding. Lanjutkan keputusan sekarang?')) return;
       const tanggapan = prompt('Tanggapan untuk siswa:');
       if (tanggapan === null) return;
       try {
-        const result = await (await lmsApi.call('resolveAppeal', {id_banding:id, status:status.trim(), tanggapan})).json();
+        const result = await (await lmsApi.call('resolveAppeal', {id_banding:id, status, tanggapan})).json();
         if (result.status !== 'success') throw new Error(result.message || 'Gagal menyimpan banding');
         await loadBanding();
       } catch (error) { alert(error.message); }

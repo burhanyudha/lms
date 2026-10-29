@@ -6,6 +6,14 @@ function validManualGrade_(value) {
   return /^-?(?:\d+\.?\d*|\.\d+)$/.test(text) && isFinite(Number(text));
 }
 
+function canonicalAppealStatus_(value) {
+  var normalized = String(value == null ? '' : value).trim().toLowerCase();
+  if (normalized === 'diproses') return 'Diproses';
+  if (normalized === 'diterima') return 'Diterima';
+  if (normalized === 'ditolak') return 'Ditolak';
+  return '';
+}
+
 function appealScore_(ss, principal, id) {
   var scores = getSafeSheetData_(ss, 'ListNilai', principal).filter(function(r) {
     var v = r.nilai !== undefined ? r.nilai : r.skor;
@@ -72,8 +80,8 @@ function handleAppeal_(ss, principal, action, payload) {
     var target = rows.find(function(r) { return r.id_banding === payload.id_banding; });
     if (!target || !allowed(target)) throw new Error('Banding tidak ditemukan atau akses ditolak.');
     if (['Menunggu','Diproses'].indexOf(target.status) < 0) throw new Error('Banding sudah selesai.');
-    var status = String(payload.status || ''), response = String(payload.tanggapan || '').trim();
-    if (['Diproses','Diterima','Ditolak'].indexOf(status) < 0 || response.length > 2000) throw new Error('Status atau tanggapan tidak valid.');
+    var status = canonicalAppealStatus_(payload.status), response = String(payload.tanggapan || '').trim();
+    if (!status || response.length > 2000) throw new Error('Status atau tanggapan tidak valid.');
     var values = sheet.getDataRange().getValues(), headers = values[0].map(function(h) { return String(h).trim().toLowerCase(); });
     if (headers.indexOf('nilai_hasil') < 0) throw new Error('Kolom nilai_hasil belum disiapkan.');
     var row = values[target.rowNumber - 1].slice();

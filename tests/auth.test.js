@@ -226,8 +226,11 @@ const secondAppeal = post({action:'submitAppeal', id_materi:'MAT-X', alasan:'Pen
 assert.equal(secondAppeal.status, 'success');
 assert.equal(post({action:'updateNilaiByUsernameMateri', username:'student-x', id_materi:'MAT-X', nilai:'72', token:teacherLogin.token}).status, 'success');
 assert.equal(rowsBySheet.ListNilai[1][4], 72);
-assert.equal(post({action:'resolveAppeal', id_banding:secondAppeal.id_banding, status:'Diterima', token:teacherLogin.token}).status, 'success');
+assert.equal(post({action:'resolveAppeal', id_banding:secondAppeal.id_banding, status:'Selesai', token:teacherLogin.token}).status, 'error');
+assert.equal(post({action:'resolveAppeal', id_banding:secondAppeal.id_banding, status:'constructor', token:teacherLogin.token}).status, 'error');
+assert.equal(post({action:'resolveAppeal', id_banding:secondAppeal.id_banding, status:'dItErImA', token:teacherLogin.token}).status, 'success');
 const reviewed = post({action:'getAppeals', token:login.token}).appeals[1];
+assert.equal(reviewed.status, 'Diterima');
 assert.equal(reviewed.nilai_awal, 80);
 assert.equal(reviewed.nilai_hasil, 72);
 assert.equal(reviewed.diperiksa_oleh, 'teacher-x');

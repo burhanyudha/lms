@@ -171,9 +171,9 @@
     .appeal-metric span { display:block; color:#64748b; font-size:.75rem; }
     .appeal-metric strong { display:block; margin-top:3px; color:#0f172a; font-size:1rem; }
     .appeal-note { margin-top:12px; padding:12px 14px; border-radius:10px; background:#f8fafc; }
-    .appeal-detail-row .appeal-note { display:flex; align-items:center; gap:12px; min-width:0; margin:0; }
-    .appeal-detail-row .appeal-note-label { flex:none; }
-    .appeal-detail-row .appeal-note p { min-width:0; margin:0; }
+    .appeal-detail-row .appeal-note { display:block; min-width:0; margin:0; }
+    .appeal-detail-row .appeal-note-label { display:block; }
+    .appeal-detail-row .appeal-note p { min-width:0; margin:5px 0 0; }
     .appeal-note-label { display:block; color:#64748b; font-size:.73rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
     .appeal-note p { margin:5px 0 0; color:#334155; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.5; }
     .appeal-note-response { background:#f0fdf4; }
@@ -183,7 +183,7 @@
     .appeal-empty { padding:34px 20px; border:1px dashed #cbd5e1; border-radius:14px; background:#fff; color:#64748b; text-align:center; }
     .appeal-empty strong { display:block; margin-bottom:4px; color:#334155; }
     @media (max-width:760px) { .appeal-detail-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .appeal-detail-row .appeal-note { grid-column:1/-1; } }
-    @media (max-width:640px) { .appeal-item { padding:15px; } .appeal-item-top { flex-direction:column-reverse; gap:10px; } .appeal-item-footer { align-items:stretch; flex-direction:column; } .appeal-item-footer .btn { width:100%; } .appeal-detail-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .appeal-metric { min-width:0; } .appeal-detail-row .appeal-note { align-items:flex-start; flex-direction:column; gap:4px; } }
+    @media (max-width:640px) { .appeal-item { padding:15px; } .appeal-item-top { flex-direction:column-reverse; gap:10px; } .appeal-item-footer { align-items:stretch; flex-direction:column; } .appeal-item-footer .btn { width:100%; } .appeal-detail-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .appeal-metric { min-width:0; } }
 
     /* ACTION BUTTONS IN TABLE */
     .action-group { display: flex; gap: 8px; }

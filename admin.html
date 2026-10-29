@@ -153,6 +153,32 @@
     .appeal-preview-frame { width:100%; height:38vh; min-height:220px; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
     .appeal-review-fields { display:grid; grid-template-columns:minmax(130px,.35fr) minmax(0,1fr); gap:12px; }
     @media (max-width:640px) { .appeal-review-fields { grid-template-columns:1fr; } .appeal-review-modal .modal-body { padding:14px; } .appeal-review-modal .modal-footer { flex-direction:column-reverse; } .appeal-review-modal .modal-footer button { width:100%; } }
+    .appeal-list { display:grid; gap:14px; }
+    .appeal-item { padding:20px; border:1px solid var(--border-color); border-radius:14px; background:#fff; box-shadow:var(--shadow-sm); transition:box-shadow .18s ease,border-color .18s ease; }
+    .appeal-item:hover { border-color:#cbd5e1; box-shadow:0 8px 20px rgba(15,23,42,.06); }
+    .appeal-item-top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+    .appeal-person { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:1rem; font-weight:700; color:#0f172a; }
+    .appeal-class { padding:3px 8px; border-radius:999px; background:#f1f5f9; color:#475569; font-size:.75rem; font-weight:600; }
+    .appeal-material { margin-top:6px; color:#475569; font-size:.9rem; font-weight:600; }
+    .appeal-status-pill { flex:none; display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-size:.75rem; font-weight:700; }
+    .appeal-status-pending { background:#fff7ed; color:#c2410c; }
+    .appeal-status-progress { background:#eff6ff; color:#1d4ed8; }
+    .appeal-status-accepted { background:#ecfdf5; color:#047857; }
+    .appeal-status-rejected { background:#fef2f2; color:#b91c1c; }
+    .appeal-metrics { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+    .appeal-metric { min-width:150px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
+    .appeal-metric span { display:block; color:#64748b; font-size:.75rem; }
+    .appeal-metric strong { display:block; margin-top:3px; color:#0f172a; font-size:1rem; }
+    .appeal-note { margin-top:12px; padding:12px 14px; border-radius:10px; background:#f8fafc; }
+    .appeal-note-label { display:block; color:#64748b; font-size:.73rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .appeal-note p { margin:5px 0 0; color:#334155; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.5; }
+    .appeal-note-response { background:#f0fdf4; }
+    .appeal-item-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:14px; color:#94a3b8; font-size:.78rem; }
+    .appeal-item.compact { padding:14px; box-shadow:none; }
+    .appeal-item.compact .appeal-metrics { margin-top:10px; }
+    .appeal-empty { padding:34px 20px; border:1px dashed #cbd5e1; border-radius:14px; background:#fff; color:#64748b; text-align:center; }
+    .appeal-empty strong { display:block; margin-bottom:4px; color:#334155; }
+    @media (max-width:640px) { .appeal-item { padding:15px; } .appeal-item-top { flex-direction:column-reverse; gap:10px; } .appeal-item-footer { align-items:stretch; flex-direction:column; } .appeal-item-footer .btn { width:100%; } .appeal-metric { flex:1; min-width:120px; } }
 
     /* ACTION BUTTONS IN TABLE */
     .action-group { display: flex; gap: 8px; }
@@ -253,7 +279,13 @@
   <main class="main-content">
     <div class="container">
 
-      <section id="bandingSection" style="display:none"><div class="header-section"><h1>Banding Nilai</h1></div><div id="bandingList" class="card" style="padding:20px">Memuat data...</div></section>
+      <section id="bandingSection" style="display:none">
+        <div class="header-section">
+          <div><h1>Banding Nilai</h1><p style="margin:6px 0 0;color:var(--text-muted);">Tinjau alasan siswa, periksa tugas, lalu tetapkan hasil peninjauan.</p></div>
+          <span id="bandingCount" class="badge">Memuat…</span>
+        </div>
+        <div id="bandingList" class="appeal-list" aria-live="polite">Memuat data banding…</div>
+      </section>
       <!-- ================= SECTION: DASHBOARD ================= -->
       <section id="dashboardSection">
         <div class="header-section">
@@ -1351,17 +1383,37 @@
       }
     }
     function renderBanding() {
-      const pending = dataBanding.filter(a => ['Menunggu', 'Diproses'].includes(a.status)).slice().reverse().slice(0, 5);
-      const render = (items, editable) => items.length ? items.map(a => {
-        const material = dataMateri.find(m => String(getVal(m, ['id_materi', 'idmateri', 'id']) || '') === String(a.id_materi));
-        const title = getVal(material || {}, ['judul', 'materi']) || a.id_materi;
+      const pendingAll = dataBanding.filter(a => ['Menunggu', 'Diproses'].includes(a.status));
+      const pending = pendingAll.slice().reverse().slice(0, 5);
+      const render = (items, editable, compact) => items.length ? items.map(a => {
+        const material = dataMateri.find(m => String(getVal(m, ['id_materi', 'idmateri', 'id']) || '').trim() === String(a.id_materi || '').trim());
+        const title = getVal(material || {}, ['judul', 'materi']) || a.id_materi || 'Materi';
         const e = escapeAttendanceHtml;
-        return `<div style="border-bottom:1px solid var(--border-color);padding:12px 0"><strong>${e(a.nama)} • ${e(a.kelas)}</strong><div>${e(title)} — Nilai saat diajukan: ${e(a.nilai_awal)}${a.nilai_hasil !== undefined && a.nilai_hasil !== '' ? ' • Nilai setelah peninjauan: ' + e(a.nilai_hasil) : ''}</div><div>Alasan: ${e(a.alasan)}</div><div>Status: ${e(a.status)}${a.tanggapan ? ' • ' + e(a.tanggapan) : ''}</div>${editable && ['Menunggu','Diproses'].includes(a.status) ? `<button class="btn btn-sm btn-outline" data-appeal-id="${e(a.id_banding)}">Tindak lanjuti</button>` : ''}</div>`;
-      }).join('') : '<p>Belum ada pengajuan banding.</p>';
-      document.getElementById('bandingDashboard').innerHTML = render(pending, false);
+        const status = String(a.status || 'Menunggu');
+        const statusKey = status === 'Menunggu' ? 'pending' : status === 'Diproses' ? 'progress' : status === 'Diterima' ? 'accepted' : status === 'Ditolak' ? 'rejected' : 'pending';
+        const dateText = a.tanggal_pengajuan && !Number.isNaN(new Date(a.tanggal_pengajuan).getTime()) ? new Date(a.tanggal_pengajuan).toLocaleString('id-ID', {dateStyle:'medium',timeStyle:'short'}) : '';
+        const action = editable && ['Menunggu','Diproses'].includes(status) ? `<button class="btn btn-primary" data-appeal-id="${e(a.id_banding)}"><i data-lucide="clipboard-check"></i> Tindak lanjuti</button>` : '';
+        return `<article class="appeal-item${compact ? ' compact' : ''}">
+          <div class="appeal-item-top">
+            <div><div class="appeal-person">${e(a.nama || 'Siswa')} <span class="appeal-class">${e(a.kelas || 'Kelas tidak tercatat')}</span></div><div class="appeal-material">${e(title)}</div></div>
+            <span class="appeal-status-pill appeal-status-${statusKey}">${e(status)}</span>
+          </div>
+          <div class="appeal-metrics">
+            <div class="appeal-metric"><span>Nilai saat diajukan</span><strong>${e(a.nilai_awal ?? '-')}</strong></div>
+            ${a.nilai_hasil !== undefined && a.nilai_hasil !== '' ? `<div class="appeal-metric"><span>Nilai setelah ditinjau</span><strong>${e(a.nilai_hasil)}</strong></div>` : ''}
+          </div>
+          <div class="appeal-note"><span class="appeal-note-label">Alasan siswa</span><p>${e(a.alasan || 'Tidak ada alasan tertulis.')}</p></div>
+          ${a.tanggapan ? `<div class="appeal-note appeal-note-response"><span class="appeal-note-label">Tanggapan guru</span><p>${e(a.tanggapan)}</p></div>` : ''}
+          <div class="appeal-item-footer"><span>${dateText ? `Diajukan ${e(dateText)}` : ''}</span>${action}</div>
+        </article>`;
+      }).join('') : '<div class="appeal-empty"><strong>Belum ada pengajuan banding</strong>Pengajuan siswa akan muncul di sini.</div>';
+      document.getElementById('bandingDashboard').innerHTML = render(pending, false, true);
       const list = document.getElementById('bandingList');
-      list.innerHTML = render(dataBanding.slice().reverse(), true);
+      list.innerHTML = render(dataBanding.slice().reverse(), true, false);
+      const count = document.getElementById('bandingCount');
+      if (count) count.textContent = `${pendingAll.length} perlu ditinjau · ${dataBanding.length} total`;
       list.querySelectorAll('[data-appeal-id]').forEach(button => button.addEventListener('click', () => tindakBanding(button.dataset.appealId)));
+      lucide.createIcons();
     }
     async function tindakBanding(id) {
       const appeal = dataBanding.find(item => String(item.id_banding) === String(id));

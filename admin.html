@@ -165,20 +165,25 @@
     .appeal-status-progress { background:#eff6ff; color:#1d4ed8; }
     .appeal-status-accepted { background:#ecfdf5; color:#047857; }
     .appeal-status-rejected { background:#fef2f2; color:#b91c1c; }
-    .appeal-metrics { display:flex; flex-wrap:nowrap; gap:10px; margin-top:16px; }
-    .appeal-metric { flex:0 0 auto; min-width:150px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
+    .appeal-detail-row { display:grid; grid-template-columns:auto auto minmax(220px,1fr); align-items:stretch; gap:10px; margin-top:16px; }
+    .appeal-detail-row.no-review { grid-template-columns:auto minmax(220px,1fr); }
+    .appeal-metric { min-width:150px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
     .appeal-metric span { display:block; color:#64748b; font-size:.75rem; }
     .appeal-metric strong { display:block; margin-top:3px; color:#0f172a; font-size:1rem; }
     .appeal-note { margin-top:12px; padding:12px 14px; border-radius:10px; background:#f8fafc; }
+    .appeal-detail-row .appeal-note { display:flex; align-items:center; gap:12px; min-width:0; margin:0; }
+    .appeal-detail-row .appeal-note-label { flex:none; }
+    .appeal-detail-row .appeal-note p { min-width:0; margin:0; }
     .appeal-note-label { display:block; color:#64748b; font-size:.73rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
     .appeal-note p { margin:5px 0 0; color:#334155; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.5; }
     .appeal-note-response { background:#f0fdf4; }
     .appeal-item-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:14px; color:#94a3b8; font-size:.78rem; }
     .appeal-item.compact { padding:14px; box-shadow:none; }
-    .appeal-item.compact .appeal-metrics { margin-top:10px; }
+    .appeal-item.compact .appeal-detail-row { margin-top:10px; }
     .appeal-empty { padding:34px 20px; border:1px dashed #cbd5e1; border-radius:14px; background:#fff; color:#64748b; text-align:center; }
     .appeal-empty strong { display:block; margin-bottom:4px; color:#334155; }
-    @media (max-width:640px) { .appeal-item { padding:15px; } .appeal-item-top { flex-direction:column-reverse; gap:10px; } .appeal-item-footer { align-items:stretch; flex-direction:column; } .appeal-item-footer .btn { width:100%; } .appeal-metrics { flex-wrap:wrap; } .appeal-metric { flex:1 1 120px; min-width:0; } }
+    @media (max-width:760px) { .appeal-detail-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .appeal-detail-row .appeal-note { grid-column:1/-1; } }
+    @media (max-width:640px) { .appeal-item { padding:15px; } .appeal-item-top { flex-direction:column-reverse; gap:10px; } .appeal-item-footer { align-items:stretch; flex-direction:column; } .appeal-item-footer .btn { width:100%; } .appeal-detail-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .appeal-metric { min-width:0; } .appeal-detail-row .appeal-note { align-items:flex-start; flex-direction:column; gap:4px; } }
 
     /* ACTION BUTTONS IN TABLE */
     .action-group { display: flex; gap: 8px; }
@@ -1398,11 +1403,11 @@
             <div><div class="appeal-person">${e(a.nama || 'Siswa')} <span class="appeal-class">${e(a.kelas || 'Kelas tidak tercatat')}</span></div><div class="appeal-material">${e(title)}</div></div>
             <span class="appeal-status-pill appeal-status-${statusKey}">${e(status)}</span>
           </div>
-          <div class="appeal-metrics">
+          <div class="appeal-detail-row${a.nilai_hasil !== undefined && a.nilai_hasil !== '' ? ' has-review' : ' no-review'}">
             <div class="appeal-metric"><span>Nilai saat diajukan</span><strong>${e(a.nilai_awal ?? '-')}</strong></div>
             ${a.nilai_hasil !== undefined && a.nilai_hasil !== '' ? `<div class="appeal-metric"><span>Nilai setelah ditinjau</span><strong>${e(a.nilai_hasil)}</strong></div>` : ''}
+            <div class="appeal-note"><span class="appeal-note-label">Alasan siswa</span><p>${e(a.alasan || 'Tidak ada alasan tertulis.')}</p></div>
           </div>
-          <div class="appeal-note"><span class="appeal-note-label">Alasan siswa</span><p>${e(a.alasan || 'Tidak ada alasan tertulis.')}</p></div>
           ${a.tanggapan ? `<div class="appeal-note appeal-note-response"><span class="appeal-note-label">Tanggapan guru</span><p>${e(a.tanggapan)}</p></div>` : ''}
           <div class="appeal-item-footer"><span>${dateText ? `Diajukan ${e(dateText)}` : ''}</span>${action}</div>
         </article>`;

@@ -1276,7 +1276,6 @@
           const cardSubject = escapeCardText(mapelName);
           const detailId = `material-details-${i}`;
           const actionsHTML = `<div class="course-actions">${btnPelajari}${btnKuis}${viewBtnHTML}</div>`;
-          const completedActionsHTML = viewBtnHTML ? `<div class="course-actions">${viewBtnHTML}</div>` : '';
           let cardHTML = isGraded ? `
             <article class="course-card course-card-completed">
               <div class="course-completed-icon"><i data-lucide="circle-check" style="width:24px;height:24px;"></i></div>
@@ -1290,7 +1289,7 @@
               </div>
               <div class="course-card-details" id="${detailId}" hidden>
                 <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:10px;"><i data-lucide="user" style="width:12px;height:12px;vertical-align:middle;"></i> ${escapeCardText(namaGuru)}${timeBadge}</div>
-                ${completedActionsHTML}
+                ${actionsHTML}
                 ${gradingDetailsHTML}
               </div>
             </article>` : `

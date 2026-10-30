@@ -266,6 +266,19 @@
       box-shadow: var(--shadow-sm);
     }
 
+    .outstanding-list { display:grid; gap:12px; margin:0 0 24px; }
+    .outstanding-subject { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:16px; border:1px solid #fed7aa; border-radius:14px; background:#fff7ed; }
+    .outstanding-copy { display:flex; align-items:center; gap:14px; min-width:0; }
+    .outstanding-icon { width:46px; height:46px; flex:0 0 46px; display:grid; place-items:center; border-radius:12px; background:#ea580c; color:white; }
+    .outstanding-subject h3 { margin:0; color:#9a3412; font-size:1rem; }
+    .outstanding-subject p { margin:4px 0 0; color:#c2410c; font-size:.9rem; }
+    .outstanding-breakdown { display:block; margin-top:4px; color:#9a3412; font-size:.75rem; }
+    .outstanding-action { display:inline-flex; align-items:center; justify-content:center; gap:8px; flex:0 0 auto; padding:12px 16px; border:0; border-radius:10px; background:#ea580c; color:white; font:inherit; font-size:.85rem; font-weight:700; cursor:pointer; }
+    @media (max-width:600px) {
+      .outstanding-subject { align-items:stretch; flex-direction:column; gap:12px; }
+      .outstanding-action { width:100%; }
+    }
+
     .stat-icon {
       width: 32px;
       height: 32px;
@@ -729,6 +742,7 @@
             <div style="font-weight:700;" id="myRank">-</div>
           </div>
         </div>
+        <div id="outstandingMaterials" class="outstanding-list" aria-live="polite" hidden></div>
 
         <div class="stat-card" style="padding: 0; overflow: hidden; margin-bottom: 24px;">
           <div style="padding: 16px 16px 8px 16px; display: flex; justify-content: space-between; align-items: center;">
@@ -885,6 +899,8 @@
       return undefined;
     };
 
+    const getMaterialSubject = material => (getVal(material, ['mapel', 'matapelajaran']) || 'Umum').toString().trim() || 'Umum';
+
     document.getElementById("welcomeText").innerText = "Halo, " + user.nama.split(' ')[0] + "!";
     document.getElementById("avatar-toggle").innerText = user.nama.charAt(0);
     document.getElementById("user-fullname").innerText = user.nama;
@@ -942,6 +958,67 @@
       }
     }
 
+    function renderOutstandingMaterials(materials, progress, taskUrls, gradedRecords) {
+      const container = document.getElementById('outstandingMaterials');
+      const groups = new Map();
+      const evaluativeTypes = new Set(['kuis', 'tugas', 'praktik', 'ujian praktik', 'survey', 'editor']);
+
+      materials.filter(material => String(material.status || material.Status || 'Aktif').trim().toLowerCase() !== 'draft').forEach(material => {
+        const id = String(getVal(material, ['id_materi', 'idmateri', 'materiid', 'id']) || '').trim();
+        const type = String(getVal(material, ['tipeevaluasi', 'tipe', 'evaluasi', 'jenis']) || '').trim().toLowerCase();
+        if (!id || !evaluativeTypes.has(type) || gradedRecords.has(id)) return;
+
+        const subject = getMaterialSubject(material);
+        const key = subject.toLocaleLowerCase('id');
+        if (!groups.has(key)) groups.set(key, {subject, total:0, submitted:0});
+        const group = groups.get(key);
+        group.total++;
+
+        const submitted = Boolean(String(taskUrls.get(id) || '').trim()) || progress.some(record => {
+          const progressId = String(getVal(record, ['id_materi', 'idmateri', 'materi', 'modul', 'id']) || '').trim();
+          const submission = String(getVal(record, ['nilai', 'skor', 'point', 'status']) || '');
+          return progressId === id && /terkirim|https?:\/\//i.test(submission);
+        });
+        if (submitted) group.submitted++;
+      });
+
+      container.replaceChildren();
+      Array.from(groups.values()).sort((a, b) => a.subject.localeCompare(b.subject, 'id')).forEach(group => {
+        const card = document.createElement('article');
+        card.className = 'outstanding-subject';
+        const copy = document.createElement('div');
+        copy.className = 'outstanding-copy';
+        const icon = document.createElement('div');
+        icon.className = 'outstanding-icon';
+        icon.innerHTML = '<i data-lucide="bell-ring" style="width:24px;height:24px"></i>';
+        const text = document.createElement('div');
+        const title = document.createElement('h3');
+        title.textContent = `Ada tugas/kuis belum ada nilainya · ${group.subject}`;
+        const summary = document.createElement('p');
+        summary.textContent = `Kamu memiliki ${group.total} tugas/kuis yang belum ada nilainya.`;
+        const breakdown = document.createElement('small');
+        breakdown.className = 'outstanding-breakdown';
+        breakdown.textContent = `${group.total - group.submitted} belum dikumpulkan · ${group.submitted} sudah dikumpulkan, menunggu penilaian`;
+        text.append(title, summary, breakdown);
+        copy.append(icon, text);
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'outstanding-action';
+        action.dataset.subject = group.subject;
+        action.innerHTML = 'Lihat Materi <i data-lucide="arrow-right" style="width:16px;height:16px"></i>';
+        action.addEventListener('click', () => {
+          showTab('materi');
+          const filter = document.getElementById('filterMapelSiswa');
+          filter.value = group.subject;
+          filterMateriSiswa();
+        });
+        card.append(copy, action);
+        container.append(card);
+      });
+      container.hidden = groups.size === 0;
+      if (groups.size) lucide.createIcons();
+    }
+
     function toggleDropdown() { document.getElementById('profile-dropdown').classList.toggle('active'); }
 
     function showTab(tab) {
@@ -984,10 +1061,7 @@
         const selectMapel = document.getElementById("filterMapelSiswa");
         if (selectMapel && selectMapel.options.length <= 1) {
           const mapelSet = new Set();
-          dataMateri.forEach(m => {
-            const mp = (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || "").toString().trim();
-            if (mp) mapelSet.add(mp);
-          });
+          dataMateri.forEach(m => mapelSet.add(getMaterialSubject(m)));
           Array.from(mapelSet).sort().forEach(mp => {
             const opt = document.createElement("option");
             opt.value = mp;
@@ -999,7 +1073,7 @@
         // Terapkan filter mapel dari dropdown
         const mapelSelected = selectMapel ? selectMapel.value : "";
         let dataMateriFiltered = mapelSelected
-          ? dataMateri.filter(m => (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || "").toString().trim().toLowerCase() === mapelSelected.toLowerCase())
+          ? dataMateri.filter(m => getMaterialSubject(m).toLowerCase() === mapelSelected.toLowerCase())
           : dataMateri;
 
         // Filter out draft materials so they don't appear for students
@@ -1061,6 +1135,7 @@
           manualScores.get(id).push(p);
         });
         scoreRecordsByMaterial.forEach((rows, id) => scoreRecordsByMaterial.set(id, selectScoreRecord(rows)));
+        renderOutstandingMaterials(dataMateri, userProgress, taskUrls, scoreRecordsByMaterial);
         manualScores.forEach((rows, id) => {
           const chosen = selectScoreRecord(rows);
           if (chosen && String(chosen.penilaian_manual || '').trim().toLowerCase() === 'ya') manualScores.set(id, chosen);
@@ -1268,7 +1343,7 @@
             viewBtnHTML = `<button class="btn-action" style="background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;grid-column:1/-1;" onclick="openViewModal('${previewUrl}')"><i data-lucide="eye" style="width:14px"></i> Lihat Tugas Anda</button>`;
           }
 
-          let mapelName = (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || "Umum").toString().trim();
+          let mapelName = getMaterialSubject(m);
           let matchedGuru = dataGuruMentah.find(g => (g.mapel || "").toString().trim().toLowerCase() === mapelName.toLowerCase());
           let namaGuru = matchedGuru && matchedGuru.nama ? matchedGuru.nama : "Guru Pengampu";
 

@@ -285,6 +285,10 @@
       gap: 16px;
     }
 
+    #materiList.course-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .course-card {
       background: white;
       border-radius: 12px;
@@ -329,6 +333,55 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+
+    .course-card-pending {
+      align-self: start;
+      border: 2px solid #fb923c;
+      background: #fffaf5;
+    }
+
+    .course-card-completed {
+      align-self: start;
+      flex-wrap: wrap;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      border-left-color: #10b981;
+      padding: 12px 14px;
+    }
+
+    .course-completed-icon {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: #d1fae5;
+      color: #059669;
+    }
+
+    .course-completed-main { min-width: 0; flex: 1; }
+    .course-completed-heading { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+    .course-completed-subject { color:#059669; font-size:.75rem; font-weight:700; text-transform:uppercase; }
+    .course-completed-status { padding:2px 8px; border-radius:6px; background:#d1fae5; color:#047857; font-size:.68rem; font-weight:700; }
+    .course-completed-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:2px 0 0; color:#1e293b; font-size:.9rem; font-weight:650; }
+    .course-completed-controls { display:flex; flex:0 0 auto; align-items:center; gap:8px; }
+    .course-completed-score { display:inline-flex; align-items:center; gap:5px; padding:7px 10px; border:1px solid #a7f3d0; border-radius:10px; background:#ecfdf5; color:#059669; font-size:.78rem; font-weight:700; white-space:nowrap; }
+    .course-details-toggle { padding:7px 10px; border:1px solid #cbd5e1; border-radius:10px; background:white; color:#475569; font:inherit; font-size:.75rem; font-weight:650; cursor:pointer; white-space:nowrap; }
+    .course-card-details { width:100%; padding-top:12px; border-top:1px solid var(--border-color); }
+    .course-card-details[hidden] { display:none; }
+
+    @media (max-width: 760px) {
+      #materiList.course-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .course-card-completed { align-items:flex-start; flex-wrap:wrap; }
+      .course-completed-main { flex-basis:calc(100% - 58px); }
+      .course-completed-controls { width:100%; padding-left:54px; }
+      .course-completed-title { white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
     }
 
     .btn-action {
@@ -1140,11 +1193,14 @@
             }
           }
 
-          let scoreBadge = hasScore ? `<span style="font-size:0.7rem; font-weight:700; color:#059669; background:#d1fae5; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i data-lucide="check-circle" style="width:14px; height:14px;"></i> Point: ${sVal}</span>` 
+          const gradedRecord = scoreRecordsByMaterial.get(mid);
+          const isGraded = Boolean(gradedRecord);
+          const isSubmitted = Boolean(fileUrl || (hasScore && /terkirim/i.test(String(sVal))));
+          const escapeCardText = value => String(value == null ? '' : value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));
+          let scoreBadge = isGraded ? `<span style="font-size:0.7rem; font-weight:700; color:#059669; background:#d1fae5; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i data-lucide="check-circle" style="width:14px; height:14px;"></i> Point: ${escapeCardText(getVal(gradedRecord, ['nilai', 'skor', 'point']))}</span>`
+            : isSubmitted ? `<span style="font-size:0.7rem;font-weight:700;color:#c2410c;background:#ffedd5;padding:4px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;"><i data-lucide="clock" style="width:14px;height:14px;"></i> Tugas Terkirim</span>`
             : `<span style="font-size:0.7rem; font-weight:700; color:#94a3b8; background:#f1f5f9; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i data-lucide="circle" style="width:14px; height:14px;"></i> Belum Ada Point</span>`;
 
-          const escapeCardText = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-          const gradedRecord = scoreRecordsByMaterial.get(mid);
           let gradingDetailsHTML = '';
           if (gradedRecord) {
             const grade = getVal(gradedRecord, ['nilai', 'skor', 'point']);
@@ -1152,7 +1208,7 @@
             const appeals = studentAppeals.filter(row => String(row.id_materi || '').trim() === mid);
             const latestAppeal = appeals[appeals.length - 1];
             const appealActive = appeals.some(row => ['Menunggu', 'Diproses'].includes(String(row.status || '')));
-            gradingDetailsHTML = `<div class="material-grade-details" style="grid-column:1/-1;display:grid;gap:6px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+            gradingDetailsHTML = `<div class="material-grade-details" style="display:grid;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
               <div style="font-weight:700;color:#0f172a;">Nilai: ${escapeCardText(grade)}</div>
               <div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#64748b;">Feedback: ${escapeCardText(feedbackText || 'Belum ada feedback.')}</div>
               ${latestAppeal ? `<div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#475569;">Banding: ${escapeCardText(latestAppeal.status)}${latestAppeal.tanggapan ? ` — ${escapeCardText(latestAppeal.tanggapan)}` : ''}</div>` : ''}
@@ -1218,34 +1274,41 @@
           let matchedGuru = dataGuruMentah.find(g => (g.mapel || "").toString().trim().toLowerCase() === mapelName.toLowerCase());
           let namaGuru = matchedGuru && matchedGuru.nama ? matchedGuru.nama : "Guru Pengampu";
 
-          let cardHTML = `
-          <div class="course-card">
-            <div class="course-header">
-              <div class="course-content">
-                <div style="font-size:0.75rem; color:var(--primary); font-weight:700; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">
-                   ${mapelName}
-                </div>
-                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:600; line-height:1.4; color:#334155;">${m.judul || m.Judul || ("Materi " + (i + 1))}</h3>
-                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:500; margin-bottom:10px; display:flex; align-items:center; gap:4px;">
-                   <i data-lucide="user" style="width:12px; height:12px;"></i> ${namaGuru}
-                </div>
-                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
-                  ${timeBadge}
-                  ${scoreBadge}
-                </div>
+          const cardTitle = escapeCardText(m.judul || m.Judul || ("Materi " + (i + 1)));
+          const cardSubject = escapeCardText(mapelName);
+          const detailId = `material-details-${i}`;
+          const actionsHTML = `<div class="course-actions">${btnPelajari}${btnKuis}${viewBtnHTML}</div>`;
+          let cardHTML = isGraded ? `
+            <article class="course-card course-card-completed">
+              <div class="course-completed-icon"><i data-lucide="circle-check" style="width:24px;height:24px;"></i></div>
+              <div class="course-completed-main">
+                <div class="course-completed-heading"><span class="course-completed-subject">${cardSubject}</span><span class="course-completed-status">SELESAI</span></div>
+                <h3 class="course-completed-title" title="${cardTitle}">${cardTitle}</h3>
               </div>
-              <div style="color:var(--primary); opacity:0.15; flex-shrink:0;">
-                <i data-lucide="${tipe === 'Praktik' || tipe === 'Ujian praktik' ? 'clipboard-check' : 'book-open'}" style="width:40px; height:40px;"></i>
+              <div class="course-completed-controls">
+                <span class="course-completed-score"><i data-lucide="award" style="width:16px;height:16px;"></i> Point: ${escapeCardText(getVal(gradedRecord, ['nilai', 'skor', 'point']))}</span>
+                <button type="button" class="course-details-toggle" aria-expanded="false" aria-controls="${detailId}" onclick="toggleMaterialDetails(this)">Detail <i data-lucide="chevron-down" style="width:14px;height:14px;vertical-align:middle;"></i></button>
               </div>
-            </div>
-            <div class="course-actions">
-              ${btnPelajari}
-              ${btnKuis}
-              ${viewBtnHTML}
-              ${gradingDetailsHTML}
-            </div>
-          </div>
-        `;
+              <div class="course-card-details" id="${detailId}" hidden>
+                <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:10px;"><i data-lucide="user" style="width:12px;height:12px;vertical-align:middle;"></i> ${escapeCardText(namaGuru)}${timeBadge}</div>
+                ${gradingDetailsHTML}
+                ${actionsHTML}
+              </div>
+            </article>` : `
+            <article class="course-card course-card-pending">
+              <div class="course-header">
+                <div class="course-content">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--primary);font-size:.75rem;font-weight:700;text-transform:uppercase;">
+                    <span>${cardSubject}</span><span style="padding:4px 8px;border:1px solid #fed7aa;border-radius:999px;background:#ffedd5;color:#c2410c;white-space:nowrap;">${isSubmitted ? 'Menunggu Penilaian' : 'Belum Ada Nilai'}</span>
+                  </div>
+                  <h3 style="margin:8px 0 4px;font-size:.95rem;font-weight:650;line-height:1.4;color:#334155;">${cardTitle}</h3>
+                  <div style="font-size:.75rem;color:var(--text-muted);font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:4px;"><i data-lucide="user" style="width:12px;height:12px;"></i> ${escapeCardText(namaGuru)}</div>
+                  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">${timeBadge}${scoreBadge}</div>
+                </div>
+                <div style="color:var(--primary);opacity:.15;flex-shrink:0;"><i data-lucide="${tipe === 'Praktik' || tipe === 'Ujian praktik' ? 'clipboard-check' : 'book-open'}" style="width:40px;height:40px;"></i></div>
+              </div>
+              ${actionsHTML}
+            </article>`;
 
           if (!hasScore && !isMateriLocked && !upNextFound) {
             upNextHTML = cardHTML;
@@ -1523,6 +1586,16 @@
         </div>
       </div>
     `;
+    }
+
+    function toggleMaterialDetails(button) {
+      const details = document.getElementById(button.getAttribute('aria-controls'));
+      if (!details) return;
+      const expanded = button.getAttribute('aria-expanded') === 'true';
+      button.setAttribute('aria-expanded', String(!expanded));
+      details.hidden = expanded;
+      button.innerHTML = `Detail <i data-lucide="${expanded ? 'chevron-down' : 'chevron-up'}" style="width:14px;height:14px;vertical-align:middle;"></i>`;
+      lucide.createIcons();
     }
 
     function filterMateriSiswa() {

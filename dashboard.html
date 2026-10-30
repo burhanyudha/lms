@@ -1203,13 +1203,11 @@
 
           let gradingDetailsHTML = '';
           if (gradedRecord) {
-            const grade = getVal(gradedRecord, ['nilai', 'skor', 'point']);
             const feedbackText = getVal(gradedRecord, ['feedback']);
             const appeals = studentAppeals.filter(row => String(row.id_materi || '').trim() === mid);
             const latestAppeal = appeals[appeals.length - 1];
             const appealActive = appeals.some(row => ['Menunggu', 'Diproses'].includes(String(row.status || '')));
             gradingDetailsHTML = `<div class="material-grade-details" style="display:grid;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
-              <div style="font-weight:700;color:#0f172a;">Nilai: ${escapeCardText(grade)}</div>
               <div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#64748b;">Feedback: ${escapeCardText(feedbackText || 'Belum ada feedback.')}</div>
               ${latestAppeal ? `<div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#475569;">Banding: ${escapeCardText(latestAppeal.status)}${latestAppeal.tanggapan ? ` — ${escapeCardText(latestAppeal.tanggapan)}` : ''}</div>` : ''}
               <form class="appeal-form" data-material-id="${escapeCardText(mid)}" style="display:grid;gap:8px;">
@@ -1267,7 +1265,7 @@
             if (previewUrl.includes('drive.google.com/file/d/')) {
               previewUrl = previewUrl.replace(/\/view.*$/, '/preview');
             }
-            viewBtnHTML = `<button class="btn-action" style="background:#e0f2fe; color:#0284c7; border:1px solid #bae6fd; grid-column: 1 / -1; margin-top: 2px;" onclick="openViewModal('${previewUrl}')"><i data-lucide="eye" style="width:14px"></i> Lihat Dokumen Tugas Anda</button>`;
+            viewBtnHTML = `<button class="btn-action" style="background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;grid-column:1/-1;" onclick="openViewModal('${previewUrl}')"><i data-lucide="eye" style="width:14px"></i> Lihat Tugas Anda</button>`;
           }
 
           let mapelName = (m.mapel || m.Mapel || m.matapelajaran || m.MataPelajaran || "Umum").toString().trim();
@@ -1278,6 +1276,7 @@
           const cardSubject = escapeCardText(mapelName);
           const detailId = `material-details-${i}`;
           const actionsHTML = `<div class="course-actions">${btnPelajari}${btnKuis}${viewBtnHTML}</div>`;
+          const completedActionsHTML = viewBtnHTML ? `<div class="course-actions">${viewBtnHTML}</div>` : '';
           let cardHTML = isGraded ? `
             <article class="course-card course-card-completed">
               <div class="course-completed-icon"><i data-lucide="circle-check" style="width:24px;height:24px;"></i></div>
@@ -1291,8 +1290,8 @@
               </div>
               <div class="course-card-details" id="${detailId}" hidden>
                 <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:10px;"><i data-lucide="user" style="width:12px;height:12px;vertical-align:middle;"></i> ${escapeCardText(namaGuru)}${timeBadge}</div>
+                ${completedActionsHTML}
                 ${gradingDetailsHTML}
-                ${actionsHTML}
               </div>
             </article>` : `
             <article class="course-card course-card-pending">

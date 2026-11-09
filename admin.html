@@ -1717,6 +1717,11 @@
       }
 
       filtered.forEach((m, index) => {
+        const sourceRow = Number(m.rowNumber);
+        if (!Number.isInteger(sourceRow) || sourceRow < 2) {
+          console.error("Materi diabaikan karena rowNumber tidak valid", m);
+          return;
+        }
         let statusStr = getVal(m, ['status']) || "";
         let isDraft = statusStr.toString().toLowerCase() === "draft";
         
@@ -1828,8 +1833,13 @@
     }
 
     function editMateriByRow(rowNum) {
-      console.log("Edit materi row:", rowNum);
-      const m = dataMateri.find(item => item.rowNumber == rowNum);
+      const parsedRow = Number(rowNum);
+      if (!Number.isInteger(parsedRow) || parsedRow < 2) {
+        alert("Nomor baris materi tidak valid. Muat ulang data materi lalu coba lagi.");
+        return;
+      }
+      console.log("Edit materi row:", parsedRow);
+      const m = dataMateri.find(item => Number(item.rowNumber) === parsedRow);
       if (!m) {
         alert("Data materi tidak ditemukan untuk baris: " + rowNum);
         return;

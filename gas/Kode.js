@@ -54,13 +54,20 @@ function rowObjects_(sheet) {
   var values = sheet.getDataRange().getValues();
   var display = sheet.getDataRange().getDisplayValues();
   var headers = values[0];
+  var timeZone = sheet.getParent ? sheet.getParent().getSpreadsheetTimeZone() : Session.getScriptTimeZone();
   return values.slice(1).map(function(row, offset) {
     var obj = {rowNumber: offset + 2};
     headers.forEach(function(header, index) {
       var original = header.toString().trim();
       if (!original || /password|passcode|api.?key|secret/i.test(original)) return;
       var normalized = original.toLowerCase().replace(/[^a-z0-9]/g, '');
-      var value = /^(waktu|timestamp)$/.test(normalized) ? display[offset + 1][index] : row[index];
+      if (normalized === "rownumber") return;
+      var value = row[index];
+      if (value instanceof Date && !isNaN(value.getTime())) {
+        if (normalized === "tanggal") value = Utilities.formatDate(value, timeZone, "yyyy-MM-dd");
+        else if (normalized === "updatedat" || normalized === "createdat") value = Utilities.formatDate(value, timeZone, "yyyy-MM-dd'T'HH:mm:ssXXX");
+        else if (/^(waktu|timestamp)$/.test(normalized)) value = display[offset + 1][index];
+      }
       obj[normalized] = value;
       obj[original] = value;
     });
@@ -511,6 +518,11 @@ function doPost(e) {
   var sheetName = postData.sheet;
   if ((sheetName || "").toString().toLowerCase() === "listnilai") sheetName = "ListNilai";
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (action === "gameQuestions") return jsonResponse_(getGameQuestions_(ss, postData));
+  if (action === "saveGameResult") {
+    try { return jsonResponse_(saveGameResult_(ss, postData)); }
+    catch (error) { return jsonResponse_({status: "error", code: "RESULT_SAVE_FAILED"}); }
+  }
   if (action === "studentOptions") return jsonResponse_(getStudentOptions_(ss));
   if (action === "login" || action === "loginAdmin") {
     var loginPrincipal = action === "login" && postData.nama && postData.kelas
@@ -526,6 +538,8 @@ function doPost(e) {
   var principal = getSession_(postData.token);
   if (!principal) return jsonResponse_({status: "error", code: "UNAUTHORIZED", message: "Sesi tidak valid atau sudah berakhir. Silakan login kembali."});
   if (action === "sessionInfo") return jsonResponse_({status: "success", user: principal});
+  if (action === "getGamePracticeQuestions") return jsonResponse_(getGamePracticeQuestions_(ss, principal, postData));
+  if (action === "issueGameTicket") return jsonResponse_(issueGameTicket_(principal, postData));
   if (action === "getRankingData") return jsonResponse_(getRankingData_(ss, principal));
   if (["getAppeals", "submitAppeal", "resolveAppeal"].indexOf(action) !== -1) {
     try { return jsonResponse_(handleAppeal_(ss, principal, action, postData)); }

@@ -302,6 +302,11 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .subject-tabs { display:flex; gap:8px; margin:0 10px 20px; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
+    .subject-tab { flex:0 0 auto; padding:9px 14px; border:1px solid var(--border-color); border-radius:999px; background:#fff; color:#475569; font:inherit; font-size:.85rem; font-weight:650; white-space:nowrap; cursor:pointer; }
+    .subject-tab[aria-pressed="true"] { border-color:var(--primary); background:var(--primary); color:#fff; }
+    .subject-tab:focus-visible { outline:3px solid #93c5fd; outline-offset:2px; }
+
     .course-card {
       background: white;
       border-radius: 12px;
@@ -780,12 +785,10 @@
 
       <!-- MATERI -->
       <section id="materiSection" style="display:none">
-        <div class="header-section" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:24px;">
+        <div class="header-section" style="margin-bottom:16px;">
           <h1 style="margin:0;">Daftar Materi</h1>
-          <select id="filterMapelSiswa" style="max-width:200px; padding:10px 16px; border-radius:12px; border:1px solid var(--border-color); outline:none; background-color:#fff; font-size:0.85rem; font-weight:500; color:#334155; cursor:pointer;" onchange="filterMateriSiswa()">
-            <option value="">Semua Mapel</option>
-          </select>
         </div>
+        <div id="filterMapelSiswa" class="subject-tabs" role="group" aria-label="Filter mata pelajaran"></div>
         <div id="materiList" class="course-grid">
           <!-- Skeleton Loading -->
           <div class="course-card">
@@ -872,6 +875,7 @@
 
     // Data Penampung Global untuk Filter Mapel
     let allMateriMentah = [];
+    let selectedMapelSiswa = "";
     let allProgresMentah = [];
     let allLogTugasMentah = [];
     let allGuruMentah = [];
@@ -1008,8 +1012,7 @@
         action.innerHTML = 'Lihat Materi <i data-lucide="arrow-right" style="width:16px;height:16px"></i>';
         action.addEventListener('click', () => {
           showTab('materi');
-          const filter = document.getElementById('filterMapelSiswa');
-          filter.value = group.subject;
+          selectedMapelSiswa = group.subject;
           filterMateriSiswa();
         });
         card.append(copy, action);
@@ -1057,30 +1060,27 @@
           return false;
         });
 
-        // Isi dropdown mapel secara dinamis jika belum pernah diisi
-        const selectMapel = document.getElementById("filterMapelSiswa");
-        if (selectMapel && selectMapel.options.length <= 1) {
-          const mapelSet = new Set();
-          dataMateri.forEach(m => mapelSet.add(getMaterialSubject(m)));
-          Array.from(mapelSet).sort().forEach(mp => {
-            const opt = document.createElement("option");
-            opt.value = mp;
-            opt.textContent = mp;
-            selectMapel.appendChild(opt);
+        const publishedMaterials = dataMateri.filter(m => (m.status || m.Status || "Aktif").toString().toLowerCase() !== "draft");
+        const mapelList = [...new Set(publishedMaterials.map(getMaterialSubject).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
+        if (selectedMapelSiswa && !mapelList.some(subject => subject.toLowerCase() === selectedMapelSiswa.toLowerCase())) selectedMapelSiswa = "";
+        const mapelTabs = document.getElementById("filterMapelSiswa");
+        if (mapelTabs) {
+          mapelTabs.replaceChildren();
+          [{label:"Semua Mapel",value:""}, ...mapelList.map(subject=>({label:subject,value:subject}))].forEach(tab=>{
+            const button=document.createElement('button');
+            button.type='button'; button.className='subject-tab';
+            button.setAttribute('aria-pressed',String(tab.value.toLowerCase()===selectedMapelSiswa.toLowerCase()));
+            button.textContent=tab.label;
+            button.addEventListener('click',()=>{selectedMapelSiswa=tab.value;filterMateriSiswa();});
+            mapelTabs.append(button);
           });
         }
 
-        // Terapkan filter mapel dari dropdown
-        const mapelSelected = selectMapel ? selectMapel.value : "";
+        // Terapkan filter berdasarkan tab mapel yang dipilih.
+        const mapelSelected = selectedMapelSiswa;
         let dataMateriFiltered = mapelSelected
-          ? dataMateri.filter(m => getMaterialSubject(m).toLowerCase() === mapelSelected.toLowerCase())
-          : dataMateri;
-
-        // Filter out draft materials so they don't appear for students
-        dataMateriFiltered = dataMateriFiltered.filter(m => {
-          let st = (m.status || m.Status || "Aktif").toString().toLowerCase();
-          return st !== "draft";
-        });
+          ? publishedMaterials.filter(m => getMaterialSubject(m).toLowerCase() === mapelSelected.toLowerCase())
+          : publishedMaterials;
 
         // Pisahkan pengumuman dari materi
         const pengumuman = [];

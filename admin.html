@@ -131,6 +131,18 @@
     .attendance-choice[data-status="Izin"].selected { color:#b45309; }
     .attendance-choice[data-status="Alpa"].selected { color:#b91c1c; }
     .attendance-savebar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:0 -1px; padding:12px 16px; background:#fff; border-top:1px solid var(--border-color); }
+    .journal-day-list { display:grid; gap:10px; margin-top:14px; }
+    .journal-day { overflow:hidden; border:1px solid var(--border-color); border-radius:12px; background:#fff; }
+    .journal-day summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; cursor:pointer; list-style:none; }
+    .journal-day summary::-webkit-details-marker { display:none; }
+    .journal-day summary::after { content:'⌄'; color:var(--text-muted); font-size:1.1rem; }
+    .journal-day[open] summary::after { content:'⌃'; }
+    .journal-day-title { font-weight:700; color:var(--text-primary); }
+    .journal-day-meta { display:flex; flex-wrap:wrap; gap:6px 12px; color:var(--text-muted); font-size:.8rem; }
+    .journal-entry { margin:0 14px 12px; padding:12px 14px; border-radius:9px; background:#f8fafc; }
+    .journal-entry-topic { margin-bottom:6px; color:var(--primary); font-size:.78rem; font-weight:700; }
+    .journal-entry-note { color:#334155; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .journal-entry-saved { margin-top:8px; color:var(--text-muted); font-size:.75rem; }
     @media (max-width:520px) { .attendance-summary { gap:6px; } .attendance-stat { padding:9px; } .attendance-stat strong { font-size:1.25rem; } .attendance-choice { font-size:.68rem; } .attendance-savebar { align-items:stretch; flex-direction:column; } .attendance-savebar .btn { width:100%; } }
     .filter-bar { display: flex; gap: 12px; padding: 16px 20px; background: white; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
 
@@ -3062,7 +3074,9 @@ window.koreksiTugasAI = async function(rowNumber) {
       document.getElementById('attendanceSummary').innerHTML=ABSEN_PRIMARY.map(s=>`<div class="attendance-stat"><span>${s.toUpperCase()}</span><strong style="color:${s==='Hadir'?'#16a34a':s==='Sakit'?'#2563eb':s==='Izin'?'#d97706':'#dc2626'}">${counts[s]}</strong></div>`).join('');
       document.getElementById('attendanceNotPresent').textContent=counts.Sakit+counts.Izin+counts.Alpa;
       body.innerHTML=students.length?students.map((s,index)=>{const user=getVal(s,['username','nisn','nis'])||'', saved=existing.get(normalizeAttendanceIdentity(user)), status=getVal(saved||{},['status'])||'', note=getVal(saved||{},['keterangan'])||'', name=getVal(s,['nama'])||user;return `<div class="attendance-student" data-user="${escapeAttendanceHtml(user)}" data-status="${escapeAttendanceHtml(status)}"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="width:22px;color:#94a3b8;font:12px monospace">${index+1}.</span><strong style="font-size:.9rem">${escapeAttendanceHtml(name)}</strong><span class="attendance-current" style="margin-left:auto;font-size:.7rem;color:#64748b">${escapeAttendanceHtml(status||'Belum diisi')}</span></div><div class="attendance-options">${ABSEN_PRIMARY.map(v=>`<button type="button" class="attendance-choice ${v===status?'selected':''}" data-status="${v}" aria-pressed="${v===status}" onclick="pilihStatusAbsensi(this,'${escapeAttendanceHtml(v)}')">${v}</button>`).join('')}</div><details style="margin:8px 0 0 30px"><summary style="font-size:.75rem;color:#64748b;cursor:pointer">Status lain / keterangan</summary><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><select class="form-control abs-extra-status" aria-label="Status lain ${escapeAttendanceHtml(name)}" onchange="pilihStatusTambahan(this)" style="max-width:220px"><option value="">Pilih status lain</option>${ABSEN_STATUSES.slice(4).map(v=>`<option ${v===status?'selected':''}>${escapeAttendanceHtml(v)}</option>`).join('')}</select><input class="form-control abs-note" maxlength="300" value="${escapeAttendanceHtml(note)}" placeholder="Keterangan (opsional)" aria-label="Keterangan ${escapeAttendanceHtml(name)}" style="flex:1;min-width:160px"></div></details></div>`}).join(''):'<div style="padding:24px;text-align:center;color:var(--text-muted)">Tidak ada siswa di kelas ini.</div>';
-      const journal=dataJurnal.find(r=>attendanceKey(r)===[tanggal,kelas,mapel].map(v=>v.toLowerCase()).join('|')); document.getElementById('absensiTopik').value=getVal(journal||{},['topik'])||''; document.getElementById('absensiCatatan').value=getVal(journal||{},['catatan'])||'';
+      const journalKey=[tanggal,kelas,mapel].map(v=>v.toLowerCase()).join('|');
+      const journal=dataJurnal.filter(r=>attendanceKey(r)===journalKey).sort((a,b)=>new Date(getVal(b,['updated_at'])||0)-new Date(getVal(a,['updated_at'])||0))[0];
+      document.getElementById('absensiTopik').value=getVal(journal||{},['topik'])||''; document.getElementById('absensiCatatan').value=getVal(journal||{},['catatan'])||'';
     }
     function pilihStatusAbsensi(button,status) { const row=button.closest('[data-user]'); row.dataset.status=status; row.querySelectorAll('.attendance-choice').forEach(el=>{const active=el.dataset.status===status;el.classList.toggle('selected',active);el.setAttribute('aria-pressed',active);}); row.querySelector('.abs-extra-status').value=''; row.querySelector('.attendance-current').textContent=status; }
     function pilihStatusTambahan(select) { if(!select.value)return;const row=select.closest('[data-user]');row.dataset.status=select.value;row.querySelectorAll('.attendance-choice').forEach(el=>{el.classList.remove('selected');el.setAttribute('aria-pressed','false');});row.querySelector('.attendance-current').textContent=select.value; }
@@ -3082,9 +3096,25 @@ window.koreksiTugasAI = async function(rowNumber) {
       const students=dataUser.filter(u=>(getVal(u,['kelas','tingkat'])||'').toString().trim().toLowerCase()===kelas.toLowerCase()).sort((a,b)=>(getVal(a,['nama'])||'').localeCompare(getVal(b,['nama'])||''));
       header.innerHTML='<tr><th>Nama siswa</th>'+Array.from({length:days},(_,i)=>`<th>${i+1}</th>`).join('')+'<th>H</th><th>S</th><th>I</th><th>A</th><th>T</th><th>B</th><th>W</th></tr>';
       const mark={'Hadir':'H','Sakit':'S','Izin':'I','Alpa':'A','Telat':'T','Bolos':'B','Tidak Memakai Wearpack':'W'};
-      body.innerHTML=students.map(student=>{const username=String(getVal(student,['username','nisn','nis'])||'').toLowerCase(), identity=normalizeAttendanceIdentity(username), own=identity?rows.filter(r=>normalizeAttendanceIdentity(getVal(r,['username']))===identity):[], byDate=new Map(own.map(r=>[attendanceDateKey(getVal(r,['tanggal'])).slice(8,10),getVal(r,['status'])||''])), counts=Object.fromEntries(ABSEN_STATUSES.map(s=>[s,own.filter(r=>getVal(r,['status'])===s).length]));return `<tr><td>${escapeAttendanceHtml(getVal(student,['nama'])||username)}</td>${Array.from({length:days},(_,i)=>{const s=byDate.get(String(i+1).padStart(2,'0'))||'';return `<td title="${escapeAttendanceHtml(s)}">${mark[s]||'·'}</td>`}).join('')}<td>${counts.Hadir}</td><td>${counts.Sakit}</td><td>${counts.Izin}</td><td>${counts.Alpa}</td><td>${counts.Telat}</td><td>${counts.Bolos}</td><td>${counts['Tidak Memakai Wearpack']}</td></tr>`}).join('')||'<tr><td colspan="40">Tidak ada siswa.</td></tr>';
+      body.innerHTML=students.map(student=>{const username=String(getVal(student,['username','nisn','nis'])||'').toLowerCase(), identity=normalizeAttendanceIdentity(username), own=identity?rows.filter(r=>normalizeAttendanceIdentity(getVal(r,['username']))===identity):[], latestByDate=new Map(); own.forEach(row=>{const day=attendanceDateKey(getVal(row,['tanggal'])).slice(8,10), previous=latestByDate.get(day);if(!previous||new Date(getVal(row,['updated_at'])||0)>=new Date(getVal(previous,['updated_at'])||0))latestByDate.set(day,row);});const latestRows=[...latestByDate.values()], byDate=new Map(latestRows.map(r=>[attendanceDateKey(getVal(r,['tanggal'])).slice(8,10),getVal(r,['status'])||''])), counts=Object.fromEntries(ABSEN_STATUSES.map(s=>[s,latestRows.filter(r=>getVal(r,['status'])===s).length]));return `<tr><td>${escapeAttendanceHtml(getVal(student,['nama'])||username)}</td>${Array.from({length:days},(_,i)=>{const s=byDate.get(String(i+1).padStart(2,'0'))||'';return `<td title="${escapeAttendanceHtml(s)}">${mark[s]||'·'}</td>`}).join('')}<td>${counts.Hadir}</td><td>${counts.Sakit}</td><td>${counts.Izin}</td><td>${counts.Alpa}</td><td>${counts.Telat}</td><td>${counts.Bolos}</td><td>${counts['Tidak Memakai Wearpack']}</td></tr>`}).join('')||'<tr><td colspan="40">Tidak ada siswa.</td></tr>';
       const journals=dataJurnal.filter(r=>(getVal(r,['kelas'])||'').toString().trim().toLowerCase()===kelas.toLowerCase()&&(getVal(r,['mapel'])||'').toString().trim().toLowerCase()===mapel.toLowerCase()&&attendanceDateKey(getVal(r,['tanggal'])).slice(0,7)===month).sort((a,b)=>attendanceDateKey(getVal(a,['tanggal'])).localeCompare(attendanceDateKey(getVal(b,['tanggal']))));
-      document.getElementById('jurnalAbsenBody').innerHTML=journals.length?'<ul>'+journals.map(r=>`<li><b>${escapeAttendanceHtml(attendanceDateKey(getVal(r,['tanggal'])))} — ${escapeAttendanceHtml(getVal(r,['topik']))}</b>: ${escapeAttendanceHtml(getVal(r,['catatan']))}${getVal(r,['updated_at'])?`<div style="font-size:.8rem;color:var(--text-muted)">Terakhir disimpan ${escapeAttendanceHtml(formatAttendanceTimestamp(getVal(r,['updated_at'])))}</div>`:''}</li>`).join('')+'</ul>':'Belum ada jurnal.';
+      const journalDays=new Map();
+      journals.forEach(row=>{
+        const date=attendanceDateKey(getVal(row,['tanggal']));
+        const topic=String(getVal(row,['topik'])||'').trim();
+        const note=String(getVal(row,['catatan'])||'').trim();
+        if(!topic&&!note)return;
+        if(!journalDays.has(date))journalDays.set(date,[]);
+        journalDays.get(date).push({topic,note,savedAt:getVal(row,['updated_at'])});
+      });
+      const dayEntries=[...journalDays.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+      document.getElementById('jurnalAbsenBody').innerHTML=dayEntries.length
+        ? '<div class="journal-day-list">'+dayEntries.map(([date,entries])=>{
+          const latest=entries.map(entry=>entry.savedAt).filter(Boolean).sort((a,b)=>new Date(b)-new Date(a))[0];
+          const dateLabel=new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',dateStyle:'long'}).format(new Date(date+'T12:00:00+07:00'));
+          return `<details class="journal-day"><summary><span class="journal-day-title">${escapeAttendanceHtml(dateLabel)}</span><span class="journal-day-meta"><span>${entries.length} catatan</span>${latest?`<span>Terakhir disimpan ${escapeAttendanceHtml(formatAttendanceTimestamp(latest))}</span>`:''}</span></summary>${entries.map(entry=>`<article class="journal-entry">${entry.topic?`<div class="journal-entry-topic">${escapeAttendanceHtml(entry.topic)}</div>`:''}${entry.note?`<div class="journal-entry-note">${escapeAttendanceHtml(entry.note)}</div>`:''}${entry.savedAt?`<div class="journal-entry-saved">Disimpan ${escapeAttendanceHtml(formatAttendanceTimestamp(entry.savedAt))}</div>`:''}</article>`).join('')}</details>`;
+        }).join('')+'</div>'
+        : '<div style="padding:16px;color:var(--text-muted)">Belum ada jurnal untuk bulan ini.</div>';
     }
 
     function populateFilterRekap() {

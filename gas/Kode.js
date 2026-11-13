@@ -81,7 +81,13 @@ function attendanceHeaders_(sheetName) {
     : ["tanggal", "kelas", "mapel", "guru", "topik", "catatan", "updated_at"];
 }
 
-function attendanceKeyValue_(field, value) {
+function attendanceKeyValue_(field, value, timeZone) {
+  // Sheet dates and form dates must share the spreadsheet's local calendar day.
+  if (field === "tanggal") {
+    if (value instanceof Date && !isNaN(value.getTime())) return Utilities.formatDate(value, timeZone || Session.getScriptTimeZone(), "yyyy-MM-dd");
+    var dateText = (value || "").toString().trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(dateText)) return dateText.slice(0, 10);
+  }
   var normalized = (value || "").toString().trim().toLowerCase();
   return field === "username" && /^\d+$/.test(normalized) ? normalized.replace(/^0+(?=\d)/, "") : normalized;
 }
@@ -102,11 +108,12 @@ function upsertAttendanceRows_(ss, sheetName, records, keyFields) {
   var sheet = getAttendanceSheet_(ss, sheetName);
   var sheetValues = sheet.getDataRange().getValues();
   var headers = sheetValues[0].map(function(value) { return value.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, ""); });
+  var timeZone = ss.getSpreadsheetTimeZone();
   if (attendanceHeaders_(sheetName).some(function(required) { return headers.indexOf(required.replace(/[^a-z0-9]/g, "")) === -1; })) throw new Error("Struktur tab " + sheetName + " tidak sesuai; data lama tidak diubah.");
   var values = sheet.getDataRange().getValues();
   var keyFor = function(row) { return keyFields.map(function(field) {
     var index = headers.indexOf(field);
-    return attendanceKeyValue_(field, index === -1 ? "" : row[index]);
+    return attendanceKeyValue_(field, index === -1 ? "" : row[index], timeZone);
   }).join("\u0000"); };
   var rowsByKey = {};
   values.slice(1).forEach(function(row, index) { rowsByKey[keyFor(row)] = index + 2; });
@@ -120,7 +127,7 @@ function upsertAttendanceRows_(ss, sheetName, records, keyFields) {
         return true;
       });
     });
-    var key = keyFields.map(function(field) { return attendanceKeyValue_(field, record[field]); }).join("\u0000");
+    var key = keyFields.map(function(field) { return attendanceKeyValue_(field, record[field], timeZone); }).join("\u0000");
     var rowNumber = rowsByKey[key];
     if (rowNumber) sheet.getRange(rowNumber, 1, 1, headers.length).setValues([row]);
     else { rowsByKey[key] = values.length + appends.length + 1; appends.push(row); }
